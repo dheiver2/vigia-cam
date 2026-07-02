@@ -1,0 +1,146 @@
+[
+  {
+    "nome": "Fauntleroy Way SW & SW Cloverdale St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/Fauntleroy_SW_Cloverdale_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "California Ave SW & SW Alaska St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/California_SW_Alaska_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "California Ave SW & SW Hanford St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/California_SW_Hanford_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "California Ave SW & SW Admiral Way",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/California_SW_Admiral_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "42nd Ave SW & SW Alaska St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/42_SW_Alaska.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "41st Ave SW & SW Admiral Way ",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/41_SW_Admiral.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "Fauntleroy Way SW & SW Alaska St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/Fauntleroy_SW_Alaska_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "35th Ave SW & SW Roxbury St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Roxbury_EW.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "35th Ave SW & SW Barton St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Barton_EW.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "35th Ave SW & SW Holden St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Holden_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "35th Ave SW & SW Morgan St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Morgan_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "35th Ave SW @ Fauntleroy Way SW",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Fauntleroy_SWC.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "West Seattle"
+  },
+  {
+    "nome": "24th Ave NW & NW Market St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/24_NW_Market_EW.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Ballard / Noroeste"
+  },
+  {
+    "nome": "15th Ave NW & NW 85th St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_85_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Ballard / Noroeste"
+  },
+  {
+    "nome": "15th Ave NW & NW 65th St NS",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_65_1.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Ballard / Noroeste"
+  },
+  {
+    "nome": "15th Ave NW & NW 65th St EW",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_65_2.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Ballard / Noroeste"
+  },
+  {
+    "nome": "15th Ave NW & NW Leary Way",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_Leary_EW.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Ballard / Noroeste"
+  },
+  {
+    "nome": "Alaskan Way W & W Galer Flyover",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/Alaskan_W_Galer_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  },
+  {
+    "nome": "15th Ave W & W Dravus St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Dravus_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  },
+  {
+    "nome": "15th Ave W & W Emerson St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Emerson_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  },
+  {
+    "nome": "15th Ave W & W Garfield St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Garfield_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  },
+  {
+    "nome": "15th Ave W & W Nickerson St",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Nickerson.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  },
+  {
+    "nome": "15th Ave W & W Armory Way",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Armory_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  },
+  {
+    "nome": "Elliott & Galer Flyover",
+    "url": "https://61e0c5d388c2e.streamlock.net:443/live/Elliott_W_Galer-Flyover_NS.stream/playlist.m3u8",
+    "tipo": "hls",
+    "categoria": "Queen Anne / Magnolia"
+  }
+]

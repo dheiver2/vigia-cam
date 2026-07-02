@@ -1,0 +1,31 @@
+[project]
+name = "vigia-cam"
+version = "1.0.0"
+description = "App desktop (PySide6 + OpenCV) para monitoramento de câmeras RTSP/HLS com detecção de objetos via YOLOv8n."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Dheiver Santos" }]
+
+dependencies = [
+    "opencv-python>=4.8.0",
+    "PySide6>=6.6.0",
+    "ultralytics>=8.1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/dheiver2/vigia-cam"
+Changelog = "https://github.com/dheiver2/vigia-cam/blob/main/CHANGELOG.md"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+# E702/E501: o estilo do projeto usa ';' para agrupar setup de widgets Qt em
+# uma linha — reformatar em massa não vale o diff/risco fora do escopo.
+ignore = ["E702", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

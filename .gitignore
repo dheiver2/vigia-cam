@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pt
+build/VigiaCam.app/
+build/run.log
+build/icon.iconset/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+cameras_app/config.json
