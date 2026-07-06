@@ -32,6 +32,33 @@ struct Camera: Codable, Identifiable, Hashable {
         let grouped = Dictionary(grouping: cameras) { $0.categoria }
         return grouped.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
+
+    static let camerasPublicas: [Camera] = [
+        Camera(nome: "Fauntleroy Way SW & SW Cloverdale St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/Fauntleroy_SW_Cloverdale_NS.stream/playlist.m3u8"),
+        Camera(nome: "California Ave SW & SW Alaska St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/California_SW_Alaska_NS.stream/playlist.m3u8"),
+        Camera(nome: "California Ave SW & SW Hanford St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/California_SW_Hanford_NS.stream/playlist.m3u8"),
+        Camera(nome: "California Ave SW & SW Admiral Way", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/California_SW_Admiral_NS.stream/playlist.m3u8"),
+        Camera(nome: "42nd Ave SW & SW Alaska St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/42_SW_Alaska.stream/playlist.m3u8"),
+        Camera(nome: "41st Ave SW & SW Admiral Way", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/41_SW_Admiral.stream/playlist.m3u8"),
+        Camera(nome: "Fauntleroy Way SW & SW Alaska St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/Fauntleroy_SW_Alaska_NS.stream/playlist.m3u8"),
+        Camera(nome: "35th Ave SW & SW Roxbury St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Roxbury_EW.stream/playlist.m3u8"),
+        Camera(nome: "35th Ave SW & SW Barton St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Barton_EW.stream/playlist.m3u8"),
+        Camera(nome: "35th Ave SW & SW Holden St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Holden_NS.stream/playlist.m3u8"),
+        Camera(nome: "35th Ave SW & SW Morgan St", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Morgan_NS.stream/playlist.m3u8"),
+        Camera(nome: "35th Ave SW @ Fauntleroy Way SW", categoria: "West Seattle", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/35_SW_Fauntleroy_SWC.stream/playlist.m3u8"),
+        Camera(nome: "24th Ave NW & NW Market St", categoria: "Ballard / Noroeste", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/24_NW_Market_EW.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave NW & NW 85th St", categoria: "Ballard / Noroeste", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_85_NS.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave NW & NW 65th St NS", categoria: "Ballard / Noroeste", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_65_1.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave NW & NW 65th St EW", categoria: "Ballard / Noroeste", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_65_2.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave NW & NW Leary Way", categoria: "Ballard / Noroeste", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_NW_Leary_EW.stream/playlist.m3u8"),
+        Camera(nome: "Alaskan Way W & W Galer Flyover", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/Alaskan_W_Galer_NS.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave W & W Dravus St", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Dravus_NS.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave W & W Emerson St", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Emerson_NS.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave W & W Garfield St", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Garfield_NS.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave W & W Nickerson St", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Nickerson.stream/playlist.m3u8"),
+        Camera(nome: "15th Ave W & W Armory Way", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/15_W_Armory_NS.stream/playlist.m3u8"),
+        Camera(nome: "Elliott & Galer Flyover", categoria: "Queen Anne / Magnolia", tipo: .hls, url: "https://61e0c5d388c2e.streamlock.net:443/live/Elliott_W_Galer-Flyover_NS.stream/playlist.m3u8"),
+    ]
 }
 
 /// App configuration — validada com limites (equivalente a CFG no Python).

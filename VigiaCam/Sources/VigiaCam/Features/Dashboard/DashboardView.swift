@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var storage: StorageService
     @ObservedObject var eventService: EventService
+    @ObservedObject var rbac: RBACService
     @State private var totalCameras = 0
     @State private var totalUsuarios = 0
     @State private var totalEventos = 0
@@ -46,7 +47,7 @@ struct DashboardView: View {
 
     private func carregarDados() {
         totalCameras = storage.carregarCameras().count
-        totalUsuarios = RBACService.shared.usuarios.count
+        totalUsuarios = rbac.usuarios.count
         totalEventos = eventService.eventos.count
         onlineCameras = totalCameras
         eventService.carregarEventos(dias: 1)

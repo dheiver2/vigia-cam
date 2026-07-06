@@ -86,7 +86,13 @@ final class StorageService: ObservableObject {
     }
 
     func carregarCameras() -> [Camera] {
-        carregarJSONCriptografado("cameras.json", as: [Camera].self) ?? []
+        let loaded = carregarJSONCriptografado("cameras.json", as: [Camera].self) ?? []
+        if loaded.isEmpty {
+            let defaults = Camera.camerasPublicas
+            salvarCameras(defaults)
+            return defaults
+        }
+        return loaded
     }
 
     // MARK: - Event History (CSV)

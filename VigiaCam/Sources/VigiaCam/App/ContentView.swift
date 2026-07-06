@@ -77,7 +77,7 @@ struct ContentView: View {
     private var detail: some View {
         switch selectedTab {
         case "cameras": CameraListView(storage: storage)
-        case "dashboard": DashboardView(storage: storage, eventService: eventService)
+        case "dashboard": DashboardView(storage: storage, eventService: eventService, rbac: rbac)
         case "events": EventListView(eventService: eventService)
         case "config": ConfigView(storage: storage, rbac: rbac)
         default: CameraListView(storage: storage)

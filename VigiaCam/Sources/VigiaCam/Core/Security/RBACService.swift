@@ -44,7 +44,6 @@ struct Usuario: Codable, Identifiable, Hashable {
 /// Serviço de RBAC com persistência criptografada.
 /// Gerencia: login, CRUD de usuários, verificação de senha (PBKDF2-SHA256).
 final class RBACService: ObservableObject {
-    static let shared = RBACService()
     @Published var usuarioAtual: Usuario?
     @Published var usuarios: [Usuario] = []
 
@@ -52,8 +51,8 @@ final class RBACService: ObservableObject {
 
     init(storage: StorageService = .shared) {
         self.storage = storage
-        garantirAdminPadrao()
         usuarios = carregarUsuarios()
+        garantirAdminPadrao()
     }
 
     // MARK: - Login

@@ -2,18 +2,20 @@ import SwiftUI
 
 struct CameraCardView: View {
     let camera: Camera
+    @StateObject private var vm: CameraCardViewModel
     @State private var isHovered = false
     @State private var showingDetail = false
-    var frameImage: NSImage?
-    var fps: Double = 0
-    var detectionCount: [String: Int] = [:]
-    var isOnline: Bool = true
+
+    init(camera: Camera) {
+        self.camera = camera
+        _vm = StateObject(wrappedValue: CameraCardViewModel(camera: camera))
+    }
 
     var body: some View {
         Button(action: { showingDetail = true }) {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topTrailing) {
-                    if let img = frameImage {
+                    if let img = vm.frameImage {
                         Image(nsImage: img)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
@@ -25,23 +27,18 @@ struct CameraCardView: View {
                             .frame(height: 140)
                             .overlay(
                                 VStack(spacing: 8) {
-                                    Image(systemName: "video.slash")
-                                        .font(.system(size: 28))
-                                        .foregroundColor(VigiaTheme.border)
-                                    Text("Sem sinal")
+                                    ProgressView().tint(VigiaTheme.accent)
+                                    Text("Conectando...")
                                         .font(.system(size: 11))
                                         .foregroundColor(VigiaTheme.muted)
                                 }
                             )
                     }
                     HStack(spacing: 6) {
-                        if isOnline { LiveBadge() } else { OfflineBadge() }
+                        if vm.isOnline { LiveBadge() } else { OfflineBadge() }
                         Spacer()
-                        FPSCaption(fps: fps)
+                        FPSCaption(fps: vm.fps)
                     }.padding(8)
-                    if !detectionCount.isEmpty {
-                        VStack { Spacer(); HStack { DetectionChips(count: detectionCount); Spacer() }.padding(6) }
-                    }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -62,8 +59,10 @@ struct CameraCardView: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering } }
+        .onAppear { vm.start() }
+        .onDisappear { vm.stop() }
         .sheet(isPresented: $showingDetail) {
-            CameraDetailView(camera: camera, frameImage: frameImage, fps: fps, detectionCount: detectionCount)
+            CameraDetailView(camera: camera)
         }
     }
 }
