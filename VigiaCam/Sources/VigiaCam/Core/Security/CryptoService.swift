@@ -34,7 +34,7 @@ enum CryptoService {
 
     private static func saveKey(_ key: SymmetricKey) {
         var query = keychainQuery
-        query[kSecValueData as String] = withUnsafeBytes(of: key.rawRepresentation) { Data($0) }
+        query[kSecValueData as String] = withUnsafeBytes(of: key) { Data($0) }
         SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)
     }
@@ -82,7 +82,7 @@ enum CryptoService {
         while stream.hasBytesAvailable {
             let bytesRead = stream.read(buffer, maxLength: bufferSize)
             if bytesRead <= 0 { break }
-            hasher.update(Data(bytesNoCopy: buffer, count: bytesRead, deallocator: .none))
+            hasher.update(data: Data(bytes: buffer, count: bytesRead))
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }

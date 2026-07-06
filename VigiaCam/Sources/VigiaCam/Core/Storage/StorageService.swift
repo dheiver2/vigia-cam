@@ -1,8 +1,8 @@
 import Foundation
+import Combine
 
 /// Serviço de armazenamento local — equivalente ao servicos.py.
-/// Gerencia diretórios, JSON criptografado, CSV de eventos, JSONL de auditoria.
-final class StorageService {
+final class StorageService: ObservableObject {
     static let shared = StorageService()
 
     // MARK: - Paths (~/VigiaCam on device = Documents/VigiaCam)
@@ -98,7 +98,6 @@ final class StorageService {
 
         let filename = "eventos-\(today).csv"
         let url = dirEventos.appendingPathComponent(filename)
-        let fileExists = FileManager.default.fileExists(atPath: url.path)
 
         let formatter2 = DateFormatter()
         formatter2.dateFormat = "HH:mm:ss"
@@ -193,7 +192,7 @@ final class StorageService {
             "camera": camera,
             "usuario": usuario ?? "sistema",
             "hash_sha256": hash ?? "",
-            "tamanho_bytes": size ?? 0,
+            "tamanho_bytes": size,
             "integridade": "verificado",
         ]
 
@@ -238,7 +237,6 @@ final class StorageService {
         let timestamp = formatter.string(from: Date())
         let base = (arquivo as NSString).lastPathComponent
         let nomeZip = "evidencia-\(camera)-\(timestamp).zip"
-        let zipURL = dirCapturas.appendingPathComponent(nomeZip)
 
         guard let hash = CryptoService.sha256File(at: URL(fileURLWithPath: arquivo)) else { return nil }
         let size = (try? fileManager.attributesOfItem(atPath: arquivo)[.size] as? Int) ?? 0
@@ -254,7 +252,7 @@ final class StorageService {
             "descricao": descricao,
             "arquivo_original": base,
             "hash_sha256": hash,
-            "tamanho_bytes": size ?? 0,
+            "tamanho_bytes": size,
         ]
 
         let registro = registrarCadeia(arquivo: arquivo, tipo: "exportacao", camera: camera, usuario: usuario)
@@ -266,7 +264,7 @@ final class StorageService {
         Data/Hora: \(formatter2.string(from: Date()))
         Usuário: \(usuario ?? "sistema")
         SHA-256: \(hash)
-        Tamanho: \(size ?? 0) bytes
+        Tamanho: \(size) bytes
         ==========================
         """
 

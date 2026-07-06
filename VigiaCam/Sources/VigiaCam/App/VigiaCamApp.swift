@@ -1,6 +1,6 @@
+#if canImport(UIKit)
 import SwiftUI
 
-/// App entry point — equivalente ao __main__.py do Python.
 @main
 struct VigiaCamApp: App {
     @StateObject private var storage = StorageService.shared
@@ -20,3 +20,4 @@ struct VigiaCamApp: App {
         }
     }
 }
+#endif

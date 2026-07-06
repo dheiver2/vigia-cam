@@ -10,7 +10,8 @@ let package = Package(
     targets: [
         .target(
             name: "VigiaCam",
-            path: "Sources/VigiaCam"
+            path: "Sources/VigiaCam",
+            exclude: ["Resources"]
         ),
         .testTarget(
             name: "VigiaCamTests",

@@ -1,4 +1,5 @@
 import Foundation
+import CommonCrypto
 
 /// Perfis de acesso (RBAC) — idêntico ao Python.
 enum Perfil: String, Codable, CaseIterable {
@@ -114,10 +115,20 @@ final class RBACService: ObservableObject {
     // MARK: - Password
 
     private func hashPassword(_ senha: String, salt: String) -> String {
-        let saltData = Data(hex: salt)
-        let senhaData = Data(senha.utf8)
-        let derived = PBKDF2.deriveKey(password: senhaData, salt: saltData, iterations: 100_000, keyLength: 32)
-        return derived.map { String(format: "%02x", $0) }.joined()
+        let saltData = Data(hexString: salt)
+        let senhaData = Array(senha.utf8)
+        var derivedBytes = [UInt8](repeating: 0, count: 32)
+        let status = saltData.withUnsafeBytes { saltPtr in
+            CCKeyDerivationPBKDF(
+                CCPBKDFAlgorithm(kCCPBKDF2),
+                senha, senhaData.count,
+                saltPtr.bindMemory(to: UInt8.self).baseAddress, saltData.count,
+                CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+                100_000,
+                &derivedBytes, derivedBytes.count)
+        }
+        guard status == kCCSuccess else { return "" }
+        return derivedBytes.map { String(format: "%02x", $0) }.joined()
     }
 
     private func verifyPassword(_ senha: String, salt: String, expectedHash: String) -> Bool {
@@ -165,5 +176,21 @@ enum RBACError: LocalizedError {
         case .usuarioJaExiste: return "Usuário já existe"
         case .naoPodeRemoverUltimoAdmin: return "Não é possível remover o último administrador"
         }
+    }
+}
+
+extension Data {
+    init(hexString: String) {
+        let hex = hexString.dropFirst(hexString.hasPrefix("0x") ? 2 : 0)
+        var data = Data(capacity: hex.count / 2)
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            let nextIndex = hex.index(index, offsetBy: 2)
+            if let byte = UInt8(hex[index..<nextIndex], radix: 16) {
+                data.append(byte)
+            }
+            index = nextIndex
+        }
+        self = data
     }
 }
