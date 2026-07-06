@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 struct ConfigView: View {
@@ -30,20 +29,12 @@ struct ConfigView: View {
     private var configTab: some View {
         ScrollView {
             VStack(spacing: 16) {
-                configRow(title: "FPS Máximo", value: "\(config.fpsMax)") {
-                    Stepper("", value: $config.fpsMax, in: 1...60).labelsHidden()
-                }
-                configRow(title: "Confiança Mínima", value: String(format: "%.0f%%", config.confianca * 100)) {
-                    Slider(value: $config.confianca, in: 0.05...0.95, step: 0.05).tint(VigiaTheme.accent)
-                }
-                configRow(title: "Resolução Inferência", value: "\(config.imgsz)px") {
-                    Stepper("", value: $config.imgsz, in: 96...1280, step: 32).labelsHidden()
-                }
-                configRow(title: "Retenção (dias)", value: "\(config.retencapDias)") {
-                    Stepper("", value: $config.retencapDias, in: 1...365).labelsHidden()
-                }
+                configRow(title: "FPS Máximo", value: "\(config.fpsMax)") { Stepper("", value: $config.fpsMax, in: 1...60).labelsHidden() }
+                configRow(title: "Confiança Mínima", value: String(format: "%.0f%%", config.confianca * 100)) { Slider(value: $config.confianca, in: 0.05...0.95, step: 0.05).tint(VigiaTheme.accent) }
+                configRow(title: "Resolução Inferência", value: "\(config.imgsz)px") { Stepper("", value: $config.imgsz, in: 96...1280, step: 32).labelsHidden() }
+                configRow(title: "Retenção (dias)", value: "\(config.retencapDias)") { Stepper("", value: $config.retencapDias, in: 1...365).labelsHidden() }
                 Button(action: { storage.salvarConfig(config.validated()) }) {
-                    Text("Salvar Configurações").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
+                    Text("Salvar").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
                         .background(VigiaTheme.accentGradient).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
@@ -86,7 +77,7 @@ struct ConfigView: View {
                             .background(VigiaTheme.accent2Glow).clipShape(RoundedRectangle(cornerRadius: 4))
                         Button(action: { cameras.removeAll { $0.id == camera.id }; storage.salvarCameras(cameras) }) {
                             Image(systemName: "trash").font(.system(size: 12)).foregroundColor(VigiaTheme.danger)
-                        }
+                        }.buttonStyle(.plain)
                     }.listRowBackground(VigiaTheme.card).listRowSeparator(.hidden)
                 }}.listStyle(.plain).scrollContentBackground(.hidden)
             }
@@ -94,15 +85,16 @@ struct ConfigView: View {
     }
 
     private var addCameraSheet: some View {
-        NavigationView {
-            VStack(spacing: 16) {
-                TextField("Nome", text: $newCameraNome).textFieldStyle(.plain).padding(12)
-                    .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
-                TextField("URL (rtsp:// ou https://...)", text: $newCameraURL).textFieldStyle(.plain)
-                    .autocapitalization(.none).disableAutocorrection(true).padding(12)
-                    .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
-                TextField("Categoria", text: $newCameraCategoria).textFieldStyle(.plain).padding(12)
-                    .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
+        VStack(spacing: 16) {
+            Text("Nova Câmera").font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+            TextField("Nome", text: $newCameraNome).textFieldStyle(.plain).padding(12)
+                .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
+            TextField("URL (rtsp:// ou https://...)", text: $newCameraURL).textFieldStyle(.plain)
+                .padding(12).background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
+            TextField("Categoria", text: $newCameraCategoria).textFieldStyle(.plain).padding(12)
+                .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Button("Cancelar") { showingAddCamera = false }.buttonStyle(.plain).padding(.vertical, 10)
                 Button(action: {
                     let tipo: Camera.CameraType = newCameraURL.contains("rtsp") ? .rtsp : .hls
                     cameras.append(Camera(nome: newCameraNome.isEmpty ? newCameraURL : newCameraNome, categoria: newCameraCategoria, tipo: tipo, url: newCameraURL))
@@ -110,11 +102,13 @@ struct ConfigView: View {
                     newCameraNome = ""; newCameraURL = ""; newCameraCategoria = "Outras"; showingAddCamera = false
                 }) {
                     Text("Adicionar").font(.system(size: 14, weight: .bold)).foregroundColor(.black)
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(VigiaTheme.accentGradient).clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            }.padding(16).background(VigiaTheme.bg).navigationTitle("Nova Câmera").navigationBarTitleDisplayMode(.inline)
-        }
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(VigiaTheme.accentGradient).clipShape(RoundedRectangle(cornerRadius: 8))
+                }.buttonStyle(.plain)
+            }
+        }.padding(24).frame(width: 400).background(VigiaTheme.panel).clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(VigiaTheme.border, lineWidth: 1))
+        .padding(40)
     }
 
     private var usersTab: some View {
@@ -134,4 +128,3 @@ struct ConfigView: View {
         }}.listStyle(.plain).scrollContentBackground(.hidden)
     }
 }
-#endif

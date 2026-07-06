@@ -1,7 +1,6 @@
-#if canImport(UIKit)
 import Vision
 import CoreML
-import UIKit
+import AppKit
 
 /// Detecção de objetos com YOLOv8n via CoreML + Vision.
 final class DetectorService: ObservableObject {
@@ -33,8 +32,8 @@ final class DetectorService: ObservableObject {
         }
     }
 
-    func detectar(_ image: UIImage) -> [Detection] {
-        guard let request, let cgImage = image.cgImage else { return [] }
+    func detectar(_ image: NSImage) -> [Detection] {
+        guard let request, let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return [] }
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try? handler.perform([request])
         return []
@@ -49,24 +48,28 @@ final class DetectorService: ObservableObject {
         DispatchQueue.main.async { self.detectionCount = counts }
     }
 
-    static func aplicarPrivacyMask(_ image: UIImage, zonas: [[CGPoint]]) -> UIImage {
+    static func aplicarPrivacyMask(_ image: NSImage, zonas: [[CGPoint]]) -> NSImage {
         guard !zonas.isEmpty else { return image }
-        UIGraphicsBeginImageContextWithOptions(image.size, true, image.scale)
-        defer { UIGraphicsEndImageContext() }
-        guard let ctx = UIGraphicsGetCurrentContext() else { return image }
-        image.draw(at: .zero)
+        let size = image.size
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(origin: .zero, size: size))
+        guard let ctx = NSGraphicsContext.current?.cgContext else {
+            NSGraphicsContext.restoreGraphicsState()
+            return image
+        }
         for zona in zonas {
             guard zona.count >= 3 else { continue }
-            ctx.saveGState()
-            ctx.setFillColor(UIColor.black.cgColor)
+            ctx.setFillColor(NSColor.black.cgColor)
             ctx.beginPath()
             ctx.move(to: zona[0])
             for point in zona.dropFirst() { ctx.addLine(to: point) }
             ctx.closePath()
             ctx.fillPath()
-            ctx.restoreGState()
         }
-        return UIGraphicsGetImageFromCurrentImageContext() ?? image
+        NSGraphicsContext.restoreGraphicsState()
+        return NSImage(cgImage: rep.cgImage!, size: size)
     }
 }
 
@@ -78,14 +81,8 @@ struct Detection: Identifiable {
 }
 
 extension Detection {
-    static func color(for label: String) -> UIColor {
+    static func color(for label: String) -> NSColor {
         let hash = abs(label.hashValue)
-        return UIColor(
-            red: CGFloat((hash % 256)) / 255.0,
-            green: CGFloat(((hash / 256) % 256)) / 255.0,
-            blue: CGFloat(((hash / 65536) % 256)) / 255.0,
-            alpha: 1.0
-        )
+        return NSColor(red: CGFloat((hash % 256)) / 255.0, green: CGFloat(((hash / 256) % 256)) / 255.0, blue: CGFloat(((hash / 65536) % 256)) / 255.0, alpha: 1.0)
     }
 }
-#endif

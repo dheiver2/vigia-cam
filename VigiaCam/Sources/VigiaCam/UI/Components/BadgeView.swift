@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 struct LiveBadge: View {
@@ -86,4 +85,3 @@ struct KPICardView: View {
         }
     }
 }
-#endif

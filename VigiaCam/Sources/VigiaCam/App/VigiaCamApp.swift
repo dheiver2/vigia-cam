@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 @main
@@ -16,8 +15,10 @@ struct VigiaCamApp: App {
             } else {
                 LoginView(rbac: rbac, isLoggedIn: $isLoggedIn)
                     .preferredColorScheme(.dark)
+                    .frame(width: 420, height: 560)
             }
         }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1100, height: 700)
     }
 }
-#endif

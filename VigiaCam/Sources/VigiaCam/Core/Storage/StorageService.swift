@@ -236,8 +236,6 @@ final class StorageService: ObservableObject {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let timestamp = formatter.string(from: Date())
         let base = (arquivo as NSString).lastPathComponent
-        let nomeZip = "evidencia-\(camera)-\(timestamp).zip"
-
         guard let hash = CryptoService.sha256File(at: URL(fileURLWithPath: arquivo)) else { return nil }
         let size = (try? fileManager.attributesOfItem(atPath: arquivo)[.size] as? Int) ?? 0
 

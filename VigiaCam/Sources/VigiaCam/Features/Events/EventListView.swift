@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 struct EventListView: View {
@@ -21,14 +20,14 @@ struct EventListView: View {
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundColor(VigiaTheme.muted)
                     TextField("Buscar eventos...", text: $searchText).textFieldStyle(.plain)
-                }.padding(10).background(VigiaTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(VigiaTheme.border, lineWidth: 1))
+                }.padding(8).background(VigiaTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(VigiaTheme.border, lineWidth: 1))
                 Picker("Dias", selection: $dias) { Text("1 dia").tag(1); Text("7 dias").tag(7); Text("30 dias").tag(30) }
-                    .pickerStyle(.menu).tint(VigiaTheme.accent)
+                    .pickerStyle(.menu).frame(width: 80)
                 Button(action: { _ = eventService.exportarCSV() }) {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 14))
                 }.buttonStyle(.bordered).tint(VigiaTheme.accent)
-            }.padding(16)
+            }.padding(12)
             if filteredEvents.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "bolt.slash").font(.system(size: 48)).foregroundColor(VigiaTheme.border)
@@ -55,4 +54,3 @@ struct EventListView: View {
         .onAppear { eventService.carregarEventos(dias: dias) }
     }
 }
-#endif

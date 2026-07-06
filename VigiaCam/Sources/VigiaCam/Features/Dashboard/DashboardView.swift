@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 struct DashboardView: View {
@@ -17,7 +16,7 @@ struct DashboardView: View {
                     KPICardView(title: "Online", value: "\(onlineCameras)", icon: "wifi", color: VigiaTheme.ok)
                     KPICardView(title: "Eventos Hoje", value: "\(totalEventos)", icon: "bolt.fill", color: VigiaTheme.accent2)
                     KPICardView(title: "Usuários", value: "\(totalUsuarios)", icon: "person.2.fill", color: VigiaTheme.danger)
-                }.padding(.horizontal, 16).padding(.top, 16)
+                }.padding(16)
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Eventos Recentes").font(.system(size: 16, weight: .bold)).foregroundColor(.white).padding(.horizontal, 16)
                     if eventService.eventos.isEmpty {
@@ -53,4 +52,3 @@ struct DashboardView: View {
         eventService.carregarEventos(dias: 1)
     }
 }
-#endif

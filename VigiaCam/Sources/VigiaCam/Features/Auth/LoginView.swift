@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 struct LoginView: View {
@@ -18,8 +17,7 @@ struct LoginView: View {
                     HStack(spacing: 0) {
                         Text("VIGIA").font(.system(size: 36, weight: .black, design: .rounded)).foregroundColor(.white)
                         Text(".").font(.system(size: 36, weight: .black, design: .rounded)).foregroundColor(VigiaTheme.accent)
-                    }
-                    .shadow(color: VigiaTheme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }.shadow(color: VigiaTheme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
                     Text("MONITORAMENTO INTELIGENTE")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundColor(VigiaTheme.muted).tracking(2)
@@ -30,7 +28,6 @@ struct LoginView: View {
                         TextField("admin", text: $usuario).textFieldStyle(.plain).padding(12)
                             .background(VigiaTheme.panel)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(VigiaTheme.border, lineWidth: 1))
-                            .autocapitalization(.none).disableAutocorrection(true)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Senha").font(.system(size: 12, weight: .semibold)).foregroundColor(VigiaTheme.muted)
@@ -47,13 +44,12 @@ struct LoginView: View {
                         else { Text("ENTRAR").font(.system(size: 15, weight: .black)).foregroundColor(.black) }
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    .background(isLoading ? VigiaTheme.border : VigiaTheme.accentGradient)
+                    .background(isLoading ? AnyView(VigiaTheme.border) : AnyView(VigiaTheme.accentGradient))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .disabled(isLoading || usuario.isEmpty || senha.isEmpty)
-                }
-                .padding(.horizontal, 32)
+                }.padding(.horizontal, 32)
                 Spacer(); Spacer()
-                Text("v2.0.0 • iOS").font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
+                Text("v2.0.0 • macOS").font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
             }
         }
     }
@@ -69,4 +65,3 @@ struct LoginView: View {
         }
     }
 }
-#endif

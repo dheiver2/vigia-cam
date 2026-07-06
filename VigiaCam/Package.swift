@@ -3,12 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "VigiaCam",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    platforms: [.macOS(.v14)],
     products: [
-        .library(name: "VigiaCam", targets: ["VigiaCam"])
+        .executable(name: "VigiaCam", targets: ["VigiaCam"])
     ],
     targets: [
-        .target(
+        .executableTarget(
             name: "VigiaCam",
             path: "Sources/VigiaCam",
             exclude: ["Resources"]

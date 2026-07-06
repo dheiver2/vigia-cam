@@ -44,6 +44,7 @@ struct Usuario: Codable, Identifiable, Hashable {
 /// Serviço de RBAC com persistência criptografada.
 /// Gerencia: login, CRUD de usuários, verificação de senha (PBKDF2-SHA256).
 final class RBACService: ObservableObject {
+    static let shared = RBACService()
     @Published var usuarioAtual: Usuario?
     @Published var usuarios: [Usuario] = []
 
@@ -91,7 +92,7 @@ final class RBACService: ObservableObject {
     }
 
     func remover(usuario u: String) throws {
-        var restantes = usuarios.filter { $0.usuario != u }
+        let restantes = usuarios.filter { $0.usuario != u }
         let admins = restantes.filter { $0.perfil == .admin }
         guard !admins.isEmpty else { throw RBACError.naoPodeRemoverUltimoAdmin }
         usuarios = restantes

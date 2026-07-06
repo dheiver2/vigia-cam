@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 struct CameraListView: View {
@@ -13,26 +12,24 @@ struct CameraListView: View {
             (searchText.isEmpty || c.nome.localizedCaseInsensitiveContains(searchText))
         }
     }
-    var categories: [String] {
-        ["Todas"] + Set(cameras.map { $0.categoria }).sorted()
-    }
+    var categories: [String] { ["Todas"] + Set(cameras.map { $0.categoria }).sorted() }
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(categories, id: \.self) { cat in
-                        Button(action: { selectedCategory = cat }) {
-                            Text(cat).font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(selectedCategory == cat ? .black : VigiaTheme.text)
-                                .padding(.horizontal, 16).padding(.vertical, 8)
-                                .background(selectedCategory == cat ? VigiaTheme.accentGradient : VigiaTheme.card)
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(selectedCategory == cat ? VigiaTheme.accent : VigiaTheme.border, lineWidth: 1))
-                        }
-                    }
-                }.padding(.horizontal, 16).padding(.vertical, 12)
-            }
+            HStack(spacing: 8) {
+                TextField("Buscar câmeras...", text: $searchText).textFieldStyle(.plain)
+                    .padding(8).background(VigiaTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(VigiaTheme.border, lineWidth: 1))
+                ForEach(categories, id: \.self) { cat in
+                    Button(action: { selectedCategory = cat }) {
+                        Text(cat).font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(selectedCategory == cat ? .black : VigiaTheme.text)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(selectedCategory == cat ? AnyView(VigiaTheme.accentGradient) : AnyView(VigiaTheme.card))
+                            .clipShape(Capsule())
+                    }.buttonStyle(.plain)
+                }
+            }.padding(12)
             if filteredCameras.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "video.slash").font(.system(size: 48)).foregroundColor(VigiaTheme.border)
@@ -51,4 +48,3 @@ struct CameraListView: View {
         .onAppear { cameras = storage.carregarCameras() }
     }
 }
-#endif

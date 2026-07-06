@@ -1,4 +1,3 @@
-#if canImport(UIKit)
 import SwiftUI
 
 /// Paleta visual dark premium.
@@ -22,7 +21,6 @@ enum VigiaTheme {
     static let warning = Color(hex: 0xfbbf24)
     static let headerGradient = LinearGradient(colors: [panel, bg], startPoint: .top, endPoint: .bottom)
     static let accentGradient = LinearGradient(colors: [accent, Color(hex: 0xff7242)], startPoint: .leading, endPoint: .trailing)
-    static let accentGradientPressed = LinearGradient(colors: [Color(hex: 0xe04a15), Color(hex: 0xcc3d10)], startPoint: .leading, endPoint: .trailing)
 }
 
 extension Color {
@@ -30,4 +28,3 @@ extension Color {
         self.init(.sRGB, red: Double((hex >> 16) & 0xFF) / 255.0, green: Double((hex >> 8) & 0xFF) / 255.0, blue: Double(hex & 0xFF) / 255.0, opacity: opacity)
     }
 }
-#endif
