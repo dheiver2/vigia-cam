@@ -12,16 +12,13 @@ class CameraCardViewModel: ObservableObject {
     let camera: Camera
     private let cameraService = CameraService()
     private let detector = DetectorService()
-    private var cancellables = Set<AnyCancellable>()
     private var detectTimer: Timer?
 
     init(camera: Camera) {
         self.camera = camera
-
         cameraService.$currentFrame.assign(to: &$frameImage)
         cameraService.$fps.assign(to: &$fps)
         cameraService.$isRunning.assign(to: &$isOnline)
-
         detector.$detectionCount.assign(to: &$detectionCount)
         detector.$lastDetections.assign(to: &$lastDetections)
     }
@@ -29,12 +26,10 @@ class CameraCardViewModel: ObservableObject {
     func start() {
         guard !cameraService.isRunning else { return }
         switch camera.tipo {
-        case .hls:
+        case .hls, .rtsp:
             cameraService.startHLSStream(url: camera.url)
         case .local:
             cameraService.startLocalCamera()
-        case .rtsp:
-            cameraService.startHLSStream(url: camera.url)
         }
         startDetection()
     }
@@ -47,10 +42,12 @@ class CameraCardViewModel: ObservableObject {
 
     private func startDetection() {
         detectTimer?.invalidate()
-        detectTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self, let frame = self.cameraService.currentFrame else { return }
-            DispatchQueue.global(qos: .userInitiated).async {
-                let _ = self.detector.detectar(frame)
+        detectTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            guard let frame = self.cameraService.currentFrame else { return }
+            let imgCopy = frame.copy() as! NSImage
+            DispatchQueue.global(qos: .utility).async {
+                self.detector.detectar(imgCopy)
             }
         }
         RunLoop.main.add(detectTimer!, forMode: .default)

@@ -16,22 +16,20 @@ struct CameraCardView: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topTrailing) {
                     if let img = vm.frameImage {
-                        ZStack {
-                            Image(nsImage: img)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 140)
-                                .clipped()
-                            // Bounding boxes overlay
-                            if !vm.lastDetections.isEmpty {
-                                DetectionOverlay(detections: vm.lastDetections, imageSize: img.size)
+                        Image(nsImage: img)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 140)
+                            .clipped()
+                            .overlay(
+                                DetectionOverlay(detections: vm.lastDetections)
                                     .frame(height: 140)
-                                    .clipped()
-                            }
-                        }
+                                    .clipped(),
+                                alignment: .center
+                            )
                     } else {
                         Rectangle()
-                            .fill(VigiaTheme.bg)
+                            .fill(Color(VigiaTheme.bg))
                             .frame(height: 140)
                             .overlay(
                                 VStack(spacing: 8) {
@@ -47,15 +45,21 @@ struct CameraCardView: View {
                         Spacer()
                         FPSCaption(fps: vm.fps)
                     }.padding(8)
-                    if !vm.detectionCount.isEmpty {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                DetectionChips(count: vm.detectionCount)
-                                Spacer()
-                            }.padding(6)
+                }
+                if !vm.detectionCount.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(Array(vm.detectionCount.prefix(5).sorted(by: { $0.key < $1.key })), id: \.key) { label, count in
+                            HStack(spacing: 3) {
+                                Circle().fill(DetectorService.color(for: label)).frame(width: 6, height: 6)
+                                Text("\(label) ×\(count)")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 6).padding(.vertical, 3)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Capsule())
                         }
-                    }
+                    }.padding(.horizontal, 10).padding(.vertical, 6)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -86,7 +90,6 @@ struct CameraCardView: View {
 
 struct DetectionOverlay: View {
     let detections: [Detection]
-    let imageSize: NSSize
 
     var body: some View {
         GeometryReader { geo in
@@ -96,20 +99,22 @@ struct DetectionOverlay: View {
                 let y = (1.0 - box.origin.y - box.size.height) * geo.size.height
                 let w = box.size.width * geo.size.width
                 let h = box.size.height * geo.size.height
+                let color = DetectorService.color(for: det.label)
 
-                ZStack(alignment: .topLeading) {
-                    Rectangle()
-                        .stroke(Detection.color(for: det.label), lineWidth: 2)
-                        .frame(width: w, height: h)
-                        .position(x: x + w/2, y: y + h/2)
-                    Text("\(det.label) \(Int(det.confidence * 100))%")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 4).padding(.vertical, 2)
-                        .background(Detection.color(for: det.label))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                        .position(x: x + w/2, y: y - 8)
-                }
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(color, lineWidth: 2)
+                    .frame(width: max(w, 20), height: max(h, 20))
+                    .position(x: x + w / 2, y: y + h / 2)
+                    .overlay(
+                        Text("\(det.label) \(Int(det.confidence * 100))%")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 3).padding(.vertical, 1)
+                            .background(color)
+                            .clipShape(RoundedRectangle(cornerRadius: 2))
+                            .position(x: x + w / 2, y: y - 6),
+                        alignment: .top
+                    )
             }
         }
     }

@@ -2,7 +2,7 @@ import AVFoundation
 import Combine
 import AppKit
 
-/// Serviço de captura de vídeo — suporta câmera local e stream (HLS via URL).
+/// Serviço de captura de vídeo — HLS e câmera local.
 final class CameraService: NSObject, ObservableObject {
     @Published var isRunning = false
     @Published var currentFrame: NSImage?
@@ -37,7 +37,6 @@ final class CameraService: NSObject, ObservableObject {
 
         self.captureSession = session
         session.startRunning()
-        DispatchQueue.main.async { self.isRunning = true }
     }
 
     func stopCamera() {
@@ -47,15 +46,16 @@ final class CameraService: NSObject, ObservableObject {
         player = nil
         sessionQueue.async { [weak self] in
             self?.captureSession?.stopRunning()
-            DispatchQueue.main.async { self?.isRunning = false; self?.currentFrame = nil }
+            DispatchQueue.main.async {
+                self?.isRunning = false
+                self?.currentFrame = nil
+                self?.fps = 0
+            }
         }
     }
 
     func startHLSStream(url: String) {
-        guard let streamURL = URL(string: url) else {
-            print("[CameraService] URL inválida: \(url)")
-            return
-        }
+        guard let streamURL = URL(string: url) else { return }
 
         let asset = AVURLAsset(url: streamURL)
         let playerItem = AVPlayerItem(asset: asset)
@@ -70,25 +70,28 @@ final class CameraService: NSObject, ObservableObject {
         self.player = avPlayer
         avPlayer.play()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self else { return }
-            self.isRunning = true
-            self.startFrameExtraction(player: avPlayer, output: videoOutput)
-        }
+        startFrameExtraction(player: avPlayer, output: videoOutput)
     }
 
     private func startFrameExtraction(player: AVPlayer, output: AVPlayerItemVideoOutput) {
         frameTimer?.invalidate()
+        var started = false
         frameTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 10.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             let currentTime = player.currentTime()
             guard output.hasNewPixelBuffer(forItemTime: currentTime),
                   let pixelBuffer = output.copyPixelBuffer(forItemTime: currentTime, itemTimeForDisplay: nil) else { return }
+
             let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            let context = CIContext()
+            let context = CIContext(options: [.useSoftwareRenderer: false])
             guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
             let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+
             DispatchQueue.main.async {
+                if !started {
+                    self.isRunning = true
+                    started = true
+                }
                 self.currentFrame = image
                 self.frameCount += 1
                 let now = Date()
@@ -114,6 +117,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
         let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         DispatchQueue.main.async {
             self.currentFrame = image
+            self.isRunning = true
             self.frameCount += 1
             let now = Date()
             if now.timeIntervalSince(self.lastFPSTime) >= 1.0 {
