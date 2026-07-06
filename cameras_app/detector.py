@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 
 import cv2
+import numpy as np
 
 try:
     from ultralytics import YOLO
@@ -108,3 +109,37 @@ class Detector:
             cv2.putText(frame, rotulo, (x1, y1 - 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         return frame, contagem
+
+    @staticmethod
+    def aplicar_privacy_mask(frame, zonas):
+        """Aplica pixelização nas zonas de exclusão (privacy masking).
+
+        zonas: lista de polígonos, cada polígono é lista de pontos [(x,y), ...]
+        Coordenadas são proporcionais (0.0-1.0) relativas ao frame.
+        """
+        if not zonas:
+            return frame
+        h, w = frame.shape[:2]
+        for zona in zonas:
+            if not zona or len(zona) < 3:
+                continue
+            pts = []
+            for px, py in zona:
+                pts.append([int(px * w), int(py * h)])
+            pts_array = np.array(pts, dtype=np.int32)
+            x, y, rw, rh = cv2.boundingRect(pts_array)
+            x = max(0, x); y = max(0, y)
+            rw = min(rw, w - x); rh = min(rh, h - y)
+            if rw <= 0 or rh <= 0:
+                continue
+            roi = frame[y:y+rh, x:x+rw].copy()
+            kernel_size = max(31, min(rw, rh) // 4)
+            if kernel_size % 2 == 0:
+                kernel_size += 1
+            roi_pixelado = cv2.GaussianBlur(roi, (kernel_size, kernel_size), 30)
+            mask = np.zeros((rh, rw), dtype=np.uint8)
+            shifted_pts = pts_array - np.array([x, y])
+            cv2.fillPoly(mask, [shifted_pts], 255)
+            mask3 = np.stack([mask] * 3, axis=-1)
+            frame[y:y+rh, x:x+rw] = np.where(mask3, roi_pixelado, roi)
+        return frame

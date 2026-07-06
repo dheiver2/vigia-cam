@@ -3,12 +3,16 @@
 com detecção de objetos (YOLOv8n). UI black premium em PySide6.
 
 Navegação por funcionalidades (estilo VMS):
-  • Ao Vivo      — mural de câmeras por categoria, clique p/ ampliar
-  • Eventos      — log em tempo real das detecções (timestamp, câmera, objetos)
-  • Dashboard    — métricas agregadas (online, objetos por classe)
+  • Ao Vivo      — videowall por categoria (HUD sobreposto), clique p/ ampliar,
+                   captura de imagem e gravação manual/por evento
+  • Eventos      — log em tempo real (detecções + quedas), filtro e export CSV;
+                   histórico persistido em ~/VigiaCam/eventos
+  • Dashboard    — métricas agregadas + saúde/disponibilidade por câmera
   • Câmeras      — gestão da lista (adicionar / remover) -> cameras.json
-  • Configurações— ajustes de performance/IA -> config.json
+  • Auditoria    — trilha de quem fez o quê (login, exportações, gravações…)
+  • Configurações— performance/IA, retenção e usuários -> config.json
 
+Controle de acesso: login obrigatório com perfis admin/operador.
 Só o mural da categoria selecionada roda threads de captura.
 Uso apenas com streams que você tem autorização para acessar.
 """
@@ -23,6 +27,7 @@ import time
 from collections import OrderedDict, defaultdict, deque
 
 import cv2
+import servicos
 import theme
 from detector import Detector
 from PySide6.QtCore import QPointF, Qt, QThread, QTimer, Signal, Slot
@@ -40,11 +45,14 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -61,11 +69,108 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CAMERAS_JSON = os.environ.get("VIGIACAM_CAMERAS") or os.path.join(AQUI, "cameras.json")
 CONFIG_JSON = os.environ.get("VIGIACAM_CONFIG") or os.path.join(AQUI, "config.json")
+
+
+class LoginDialog(QDialog):
+    """Tela de login obrigatório (RBAC) — UI polida."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("vigia-cam — Login")
+        self.setFixedSize(440, 340)
+        self.usuario_logado = None
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(44, 36, 44, 28)
+        lay.setSpacing(4)
+
+        logo = QLabel("VIGIA")
+        logo.setObjectName("loginTitle")
+        logo.setAlignment(Qt.AlignCenter)
+        lay.addWidget(logo)
+
+        dot = QLabel("•CAM")
+        dot.setObjectName("loginSubtitle")
+        dot.setAlignment(Qt.AlignCenter)
+        dot.setStyleSheet(f"color:{theme.ACCENT}; font-size:14px; font-weight:800; letter-spacing:2px;")
+        lay.addWidget(dot)
+
+        sub = QLabel("Acesso restrito ao sistema de monitoramento")
+        sub.setObjectName("loginSubtitle")
+        sub.setAlignment(Qt.AlignCenter)
+        lay.addWidget(sub)
+
+        lay.addSpacing(24)
+
+        lbl_user = QLabel("Usuário")
+        lbl_user.setStyleSheet(f"color:{theme.MUTED}; font-size:11px; font-weight:600; letter-spacing:0.5px;")
+        lay.addWidget(lbl_user)
+        self.in_user = QLineEdit()
+        self.in_user.setPlaceholderText("admin")
+        self.in_user.setFixedHeight(38)
+        self.in_user.setTooltip("Digite seu nome de usuário")
+        lay.addWidget(self.in_user)
+
+        lay.addSpacing(8)
+
+        lbl_senha = QLabel("Senha")
+        lbl_senha.setStyleSheet(f"color:{theme.MUTED}; font-size:11px; font-weight:600; letter-spacing:0.5px;")
+        lay.addWidget(lbl_senha)
+        self.in_senha = QLineEdit()
+        self.in_senha.setEchoMode(QLineEdit.Password)
+        self.in_senha.setPlaceholderText("••••••••")
+        self.in_senha.setFixedHeight(38)
+        self.in_senha.setTooltip("Digite sua senha")
+        self.in_senha.returnPressed.connect(self._autenticar)
+        lay.addWidget(self.in_senha)
+
+        self.erro = QLabel("")
+        self.erro.setObjectName("loginErro")
+        self.erro.setAlignment(Qt.AlignCenter)
+        lay.addWidget(self.erro)
+
+        lay.addSpacing(12)
+
+        btn = QPushButton("Entrar")
+        btn.setObjectName("loginBtn")
+        btn.setFixedHeight(44)
+        btn.setTooltip("Enter")
+        btn.clicked.connect(self._autenticar)
+        lay.addWidget(btn)
+
+        lay.addStretch()
+
+        info = QLabel("Credenciais padrão: admin / admin")
+        info.setObjectName("loginSubtitle")
+        info.setAlignment(Qt.AlignCenter)
+        info.setStyleSheet(f"color:{theme.MUTED}; font-size:10px; font-style:italic;")
+        lay.addWidget(info)
+
+        self.in_user.setFocus()
+
+    def _autenticar(self):
+        user = self.in_user.text().strip()
+        senha = self.in_senha.text()
+        if not user or not senha:
+            self.erro.setText("Preencha usuário e senha")
+            return
+        servicos.preparar_diretorios()
+        servicos.garantir_admin_padrao()
+        resultado = servicos.verificar_login(user, senha)
+        if resultado is None:
+            self.erro.setText("Credenciais inválidas")
+            self.in_senha.clear()
+            self.in_senha.setFocus()
+            return
+        self.usuario_logado = resultado
+        servicos.definir_usuario(user)
+        servicos.auditar("login", f"perfil={resultado.get('perfil')}")
+        self.accept()
 
 
 def parse_args(argv=None):
@@ -76,6 +181,8 @@ def parse_args(argv=None):
     p.add_argument("--config", help="Caminho alternativo para config.json")
     p.add_argument("--cameras", help="Caminho alternativo para cameras.json")
     p.add_argument("--sem-ia", action="store_true", help="Inicia com a detecção de IA desligada")
+    p.add_argument("--api", action="store_true", help="Inicia a REST API (FastAPI/uvicorn)")
+    p.add_argument("--api-port", type=int, default=8000, help="Porta da REST API (default: 8000)")
     p.add_argument("--version", action="version", version=f"vigia-cam {__version__}")
     return p.parse_args(argv)
 
@@ -84,6 +191,8 @@ CFG_PADRAO = {
     "detectar_a_cada": 4, "imgsz": 480, "confianca": 0.4,
     "fps_max": 20, "classes": None, "colunas": 2, "reconectar_seg": 3,
     "display_max_w": 720,
+    "retencao_dias": 30, "gravar_evento": True, "pos_evento_seg": 8,
+    "privacy_masks": {},
 }
 
 # Limites aceitos por chave: (mínimo, máximo). Valores fora são "clampados"
@@ -92,6 +201,7 @@ CFG_LIMITES = {
     "detectar_a_cada": (1, 30), "imgsz": (160, 1280), "confianca": (0.05, 0.95),
     "fps_max": (1, 60), "colunas": (1, 4), "reconectar_seg": (1, 60),
     "display_max_w": (160, 3840),
+    "retencao_dias": (1, 365), "pos_evento_seg": (2, 60),
 }
 
 
@@ -117,6 +227,10 @@ def validar_config(bruto: dict) -> dict:
                                  and all(isinstance(x, int) for x in valor)):
                 cfg[chave] = valor
             continue
+        if isinstance(padrao, bool):                   # chaves booleanas
+            if isinstance(valor, bool):
+                cfg[chave] = valor
+            continue
         if not isinstance(valor, (int, float)) or isinstance(valor, bool):
             continue                                   # tipo errado -> mantém padrão
         if chave in CFG_LIMITES:
@@ -129,12 +243,9 @@ def validar_config(bruto: dict) -> dict:
 
 
 def carregar_config() -> dict:
-    if os.path.exists(CONFIG_JSON):
-        try:
-            with open(CONFIG_JSON, encoding="utf-8") as f:
-                return validar_config(json.load(f))
-        except (json.JSONDecodeError, OSError):
-            pass
+    dados = servicos.carregar_json_criptografado(CONFIG_JSON, default=None)
+    if dados is not None:
+        return validar_config(dados)
     return dict(CFG_PADRAO)
 
 
@@ -153,7 +264,7 @@ def _escrever_json_atomico(caminho, dados):
 
 
 def salvar_config(cfg: dict) -> None:
-    _escrever_json_atomico(CONFIG_JSON, cfg)
+    servicos.salvar_json_criptografado(CONFIG_JSON, cfg)
 
 
 def _normalizar_camera(c: dict) -> dict | None:
@@ -170,17 +281,13 @@ def _normalizar_camera(c: dict) -> dict | None:
 
 
 def carregar_cameras() -> list[dict]:
-    if not os.path.exists(CAMERAS_JSON):
-        return []
-    try:
-        with open(CAMERAS_JSON, encoding="utf-8") as f:
-            bruto = json.load(f)
-    except (json.JSONDecodeError, OSError):
+    bruto = servicos.carregar_json_criptografado(CAMERAS_JSON, default=None)
+    if bruto is None:
         return []
     if not isinstance(bruto, list):
         return []
     cams = []
-    for c in bruto:                           # pula entradas malformadas em vez de quebrar
+    for c in bruto:
         nc = _normalizar_camera(c)
         if nc is not None:
             cams.append(nc)
@@ -188,7 +295,7 @@ def carregar_cameras() -> list[dict]:
 
 
 def salvar_cameras(cams: list[dict]) -> None:
-    _escrever_json_atomico(CAMERAS_JSON, cams)
+    servicos.salvar_json_criptografado(CAMERAS_JSON, cams)
 
 
 ESQUEMAS_VALIDOS = ("rtsp://", "rtsps://", "http://", "https://")
@@ -229,11 +336,12 @@ class CapturaThread(QThread):
     frame_pronto = Signal(int, QImage)
     status = Signal(int, dict, bool)   # (idx, contagem, online)
 
-    def __init__(self, idx, url, detector=None):
+    def __init__(self, idx, url, detector=None, privacy_mask=None):
         super().__init__()
         self.idx = idx
         self.url = url
         self.detector = detector
+        self.privacy_mask = privacy_mask or []
         self._rodando = True
         self._intervalo = 1.0 / max(1, CFG["fps_max"])
         self._detect_a_cada = max(1, CFG["detectar_a_cada"])
@@ -293,6 +401,11 @@ class CapturaThread(QThread):
                     frame, contagem = self.detector.desenhar(frame, dets)
                 except Exception:
                     pass
+            if self.privacy_mask:
+                try:
+                    frame = Detector.aplicar_privacy_mask(frame, self.privacy_mask)
+                except Exception:
+                    pass
             contador += 1
             agora = time.monotonic()
             if agora - ultimo_emit >= self._intervalo:
@@ -314,38 +427,35 @@ class CapturaThread(QThread):
 # Card + Mural (Ao Vivo)
 # ====================================================================
 class CameraCard(QFrame):
+    """Card de câmera com tooltip, badge de status e detecção."""
+
     clicado = Signal(object)
 
     def __init__(self):
         super().__init__()
         self.cam = None
-        self.setObjectName("cameraCard")
+        self.setObjectName("cameraTile")
+        self.setStyleSheet("QFrame#cameraTile { background: transparent; border: none; }")
         self._frames = 0
         self._t0 = None
         self.mirror = None
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(8, 8, 8, 8); lay.setSpacing(6)
-        topo = QHBoxLayout()
-        self.nome = QLabel(""); self.nome.setObjectName("camName")
-        self.badge = QLabel("• OFFLINE"); self.badge.setObjectName("offBadge")
-        topo.addWidget(self.nome, 1); topo.addWidget(self.badge)
-        lay.addLayout(topo)
-        self.meta = QLabel(""); self.meta.setObjectName("camMeta")
-        lay.addWidget(self.meta)
+        lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(0)
+
+        self.nome = QLabel(""); self.nome.setObjectName("camName"); self.nome.hide()
+        self.badge = QLabel("• OFFLINE"); self.badge.setObjectName("offBadge"); self.badge.hide()
+        self.meta = QLabel(""); self.meta.setObjectName("camMeta"); self.meta.hide()
         self.video = QLabel("—")
         self.video.setAlignment(Qt.AlignCenter)
-        self.video.setStyleSheet("background:#000; border-radius:8px; color:#666;")
+        self.video.setStyleSheet("background:#000; color:#666;")
         self.video.setMinimumSize(220, 140)
+        self.video.setTooltip("Clique para ampliar")
         lay.addWidget(self.video, 1)
-        rod = QHBoxLayout()
-        self.chips = QLabel(""); self.chips.setObjectName("detChips")
-        self.fps = QLabel(""); self.fps.setObjectName("fps")
-        rod.addWidget(self.chips, 1); rod.addWidget(self.fps)
-        lay.addLayout(rod)
+        self.chips = QLabel(""); self.chips.setObjectName("detChips"); self.chips.hide()
+        self.fps = QLabel(""); self.fps.setObjectName("fps"); self.fps.hide()
 
     def bind(self, cam):
-        """(Re)liga o card a uma câmera — usado pelo pool paginado."""
         self.cam = cam
         self.mirror = None
         self._frames = 0; self._t0 = None
@@ -354,11 +464,13 @@ class CameraCard(QFrame):
             self.nome.setText(""); self.meta.setText("")
             self.video.setText("—"); self.chips.setText(""); self.fps.setText("")
             self.badge.setText(""); self.badge.setObjectName("offBadge")
+            self.setTooltip("")
         else:
             self.nome.setText(cam["nome"])
             self.meta.setText(f"{cam.get('tipo','?').upper()} · {cam.get('categoria','')}")
             self.video.setText("conectando…"); self.chips.setText(""); self.fps.setText("")
             self.badge.setText("• OFFLINE"); self.badge.setObjectName("offBadge")
+            self.setTooltip(f"{cam['nome']}\n{cam.get('tipo','?').upper()} · {cam.get('categoria','')}")
         self.badge.style().unpolish(self.badge); self.badge.style().polish(self.badge)
         self.setVisible(cam is not None)
 
@@ -375,21 +487,19 @@ class CameraCard(QFrame):
             self.fps.setText(f"{self._frames / (agora - self._t0):.0f} fps")
             self._frames = 0; self._t0 = agora
         pix = QPixmap.fromImage(img)
-        # thumbnail: escala rápida (suficiente p/ card pequeno, bem mais leve)
         self.video.setPixmap(pix.scaled(
             self.video.size(), Qt.KeepAspectRatio, Qt.FastTransformation))
         if self.mirror is not None:
             vlabel, clabel = self.mirror
-            # viewer ampliado: escala suave (vale o custo, é uma só)
             vlabel.setPixmap(pix.scaled(
                 vlabel.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
             clabel.setText(self.chips.text())
 
     def set_status(self, contagem, online):
         if online:
-            self.badge.setText("• AO VIVO"); self.badge.setObjectName("liveBadge")
+            self.badge.setText("● AO VIVO"); self.badge.setObjectName("liveBadge")
         else:
-            self.badge.setText("• OFFLINE"); self.badge.setObjectName("offBadge")
+            self.badge.setText("● OFFLINE"); self.badge.setObjectName("offBadge")
             self.video.setText("sem sinal")
         self.badge.style().unpolish(self.badge); self.badge.style().polish(self.badge)
         self.chips.setText("  ".join(f"{k} {v}" for k, v in contagem.items()))
@@ -421,27 +531,41 @@ class MuralWidget(QWidget):
 
         col = QVBoxLayout(self); col.setContentsMargins(12, 8, 12, 12); col.setSpacing(8)
 
-        # ---- barra de controles ----
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Layout"))
+        bar.setSpacing(8)
+        lbl_layout = QLabel("Layout")
+        lbl_layout.setStyleSheet(f"color:{theme.MUTED}; font-size:11px; font-weight:600;")
+        bar.addWidget(lbl_layout)
         self.cb_layout = QComboBox(); self.cb_layout.addItems(self.LAYOUTS.keys())
         self.cb_layout.setCurrentText("2×2")
         self.cb_layout.currentTextChanged.connect(self._mudar_layout)
+        self.cb_layout.setFixedWidth(80)
         bar.addWidget(self.cb_layout)
-        bar.addSpacing(16)
-        self.btn_prev = QPushButton("‹"); self.btn_prev.clicked.connect(lambda: self._ir(self.page - 1))
-        self.lbl_pag = QLabel(""); self.lbl_pag.setObjectName("camMeta")
-        self.btn_next = QPushButton("›"); self.btn_next.clicked.connect(lambda: self._ir(self.page + 1))
+        bar.addSpacing(20)
+
+        self.btn_prev = QPushButton("‹")
+        self.btn_prev.setFixedSize(32, 32)
+        self.btn_prev.setTooltip("Página anterior (←)")
+        self.btn_prev.clicked.connect(lambda: self._ir(self.page - 1))
+        self.lbl_pag = QLabel("")
+        self.lbl_pag.setObjectName("camMeta")
+        self.lbl_pag.setStyleSheet(f"color:{theme.TEXT}; font-size:12px; font-weight:700; padding:0 8px;")
+        self.btn_next = QPushButton("›")
+        self.btn_next.setFixedSize(32, 32)
+        self.btn_next.setTooltip("Próxima página (→)")
+        self.btn_next.clicked.connect(lambda: self._ir(self.page + 1))
         bar.addWidget(self.btn_prev); bar.addWidget(self.lbl_pag); bar.addWidget(self.btn_next)
         bar.addStretch(1)
-        self.lbl_total = QLabel(f"{len(cameras)} câmeras"); self.lbl_total.setObjectName("camMeta")
+        self.lbl_total = QLabel(f"{len(cameras)} câmeras")
+        self.lbl_total.setObjectName("camMeta")
+        self.lbl_total.setStyleSheet(f"color:{theme.MUTED}; font-size:11px;")
         bar.addWidget(self.lbl_total)
         col.addLayout(bar)
 
         # ---- área rolável com a grade ----
         self.grid_host = QWidget()
         self.grade = QGridLayout(self.grid_host)
-        self.grade.setSpacing(12)
+        self.grade.setSpacing(4)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
         scroll.setWidget(self.grid_host)
@@ -510,8 +634,10 @@ class MuralWidget(QWidget):
 
     def _iniciar_threads(self):
         det = self.get_detector()
+        masks = CFG.get("privacy_masks", {})
         for i, cam in enumerate(self._page_cams()):
-            t = CapturaThread(i, cam["url"], det)
+            mask = masks.get(cam["url"], [])
+            t = CapturaThread(i, cam["url"], det, privacy_mask=mask)
             t.frame_pronto.connect(self._frame)
             t.status.connect(self._status)
             t.start()
@@ -588,14 +714,21 @@ class AoVivoSection(QWidget):
     def _viewer(self):
         w = QWidget(); lay = QVBoxLayout(w); lay.setContentsMargins(16, 12, 16, 16)
         bar = QHBoxLayout()
-        voltar = QPushButton("‹ Voltar ao mural"); voltar.setObjectName("primary")
+        voltar = QPushButton("‹ Voltar ao mural")
+        voltar.setObjectName("primary")
+        voltar.setTooltip("Esc")
         voltar.clicked.connect(self._fechar)
-        self.v_nome = QLabel(""); self.v_nome.setObjectName("camName")
-        bar.addWidget(voltar); bar.addSpacing(12); bar.addWidget(self.v_nome, 1)
-        self.v_chips = QLabel(""); self.v_chips.setObjectName("detChips")
-        bar.addWidget(self.v_chips); lay.addLayout(bar)
-        self.v_video = QLabel(""); self.v_video.setAlignment(Qt.AlignCenter)
-        self.v_video.setStyleSheet("background:#000; border-radius:10px;")
+        self.v_nome = QLabel("")
+        self.v_nome.setObjectName("camName")
+        self.v_nome.setStyleSheet("font-size:16px; font-weight:800; color:#ffffff;")
+        bar.addWidget(voltar); bar.addSpacing(16); bar.addWidget(self.v_nome, 1)
+        self.v_chips = QLabel("")
+        self.v_chips.setObjectName("detChips")
+        bar.addWidget(self.v_chips)
+        lay.addLayout(bar)
+        self.v_video = QLabel("")
+        self.v_video.setAlignment(Qt.AlignCenter)
+        self.v_video.setStyleSheet("background:#000; border-radius:8px;")
         lay.addWidget(self.v_video, 1)
         return w
 
@@ -632,34 +765,80 @@ class AoVivoSection(QWidget):
 
 
 class EventosSection(QWidget):
-    """Log em tempo real das detecções."""
+    """Log em tempo real das detecções — com empty state."""
 
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self); lay.setContentsMargins(16, 12, 16, 16)
+
         top = QHBoxLayout()
-        top.addWidget(QLabel("<b>Eventos de detecção</b> (tempo real)"))
+        title = QLabel("Eventos de detecção")
+        title.setObjectName("sectionTitle")
+        top.addWidget(title)
+        sub = QLabel("(tempo real)")
+        sub.setObjectName("sectionSub")
+        top.addWidget(sub)
         top.addStretch(1)
-        limpar = QPushButton("Limpar"); limpar.clicked.connect(self._limpar)
-        top.addWidget(limpar); lay.addLayout(top)
+
+        self.btn_exportar = QPushButton("📥 Exportar evidência")
+        self.btn_exportar.setTooltip("Empacota evidência em ZIP com hash SHA-256")
+        self.btn_exportar.clicked.connect(self._exportar)
+        top.addWidget(self.btn_exportar)
+
+        limpar = QPushButton("🗑 Limpar")
+        limpar.setTooltip("Limpa a tabela de eventos")
+        limpar.clicked.connect(self._limpar)
+        top.addWidget(limpar)
+        lay.addLayout(top)
+
+        self.empty_label = QLabel("Nenhum evento registrado ainda.\nAs detecções aparecerão aqui em tempo real.")
+        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setStyleSheet(f"color:{theme.MUTED}; font-size:13px; padding:40px;")
+        lay.addWidget(self.empty_label)
+
         self.tabela = QTableWidget(0, 3)
         self.tabela.setHorizontalHeaderLabels(["Horário", "Câmera", "Objetos"])
         self.tabela.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.tabela.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.tabela.verticalHeader().setVisible(False)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabela.setTooltip("Eventos de detecção registrados")
+        self.tabela.hide()
         lay.addWidget(self.tabela)
 
     def registrar(self, hora, camera, texto):
+        self.empty_label.hide()
+        self.tabela.show()
         self.tabela.insertRow(0)
         self.tabela.setItem(0, 0, QTableWidgetItem(hora))
         self.tabela.setItem(0, 1, QTableWidgetItem(camera))
         self.tabela.setItem(0, 2, QTableWidgetItem(texto))
-        while self.tabela.rowCount() > 300:        # cap de memória
+        while self.tabela.rowCount() > 300:
             self.tabela.removeRow(self.tabela.rowCount() - 1)
 
     def _limpar(self):
         self.tabela.setRowCount(0)
+        self.tabela.hide()
+        self.empty_label.show()
+
+    def _exportar(self):
+        caminho, _ = QFileDialog.getOpenFileName(
+            self, "Selecionar arquivo de evidência", servicos.DIR_GRAVACOES,
+            "Vídeos/Imagens (*.mp4 *.avi *.png *.jpg);;Todos (*)")
+        if not caminho:
+            return
+        camera, ok = QInputDialog.getText(self, "Câmera", "Nome da câmera:")
+        if not ok or not camera.strip():
+            return
+        descricao, ok = QInputDialog.getText(self, "Descrição", "Descrição da evidência:")
+        if not ok:
+            return
+        resultado = servicos.exportar_evidencia(caminho, camera.strip(), descricao)
+        if resultado:
+            QMessageBox.information(self, "Exportação",
+                                   f"Evidência exportada:\n{resultado}")
+        else:
+            QMessageBox.warning(self, "Erro", "Falha ao exportar evidência.")
 
 
 VEICULOS = {"car", "truck", "bus", "motorcycle", "bicycle", "train"}
@@ -700,16 +879,40 @@ class Sparkline(QWidget):
 
 
 class KpiCard(QFrame):
-    def __init__(self, titulo, cor=None):
+    """KPI card com borda accent superior e ícone."""
+
+    def __init__(self, titulo, cor=None, icono=""):
         super().__init__()
-        self.setObjectName("cameraCard")
-        v = QVBoxLayout(self); v.setSpacing(2)
+        # Escolhe o objectName baseado na cor para o QSS
+        if cor == theme.OK:
+            self.setObjectName("kpiCardOk")
+        elif cor == theme.ACCENT_2:
+            self.setObjectName("kpiCardAccent2")
+        elif cor == theme.DANGER:
+            self.setObjectName("kpiCardDanger")
+        else:
+            self.setObjectName("kpiCard")
+        v = QVBoxLayout(self); v.setSpacing(2); v.setContentsMargins(12, 10, 12, 8)
+
+        header = QHBoxLayout()
+        if icono:
+            ico = QLabel(icono)
+            ico.setStyleSheet("font-size:16px;")
+            header.addWidget(ico)
+        self.tit = QLabel(titulo)
+        self.tit.setStyleSheet(f"color:{theme.MUTED}; font-size:10px; font-weight:600; letter-spacing:0.3px;")
+        header.addWidget(self.tit)
+        header.addStretch()
+        v.addLayout(header)
+
         self.valor = QLabel("—")
         self.valor.setStyleSheet(
             f"color:{cor or theme.ACCENT}; font-size:28px; font-weight:800;")
-        self.tit = QLabel(titulo); self.tit.setObjectName("camMeta")
-        self.delta = QLabel(""); self.delta.setObjectName("camMeta")
-        v.addWidget(self.valor); v.addWidget(self.tit); v.addWidget(self.delta)
+        v.addWidget(self.valor)
+
+        self.delta = QLabel("")
+        self.delta.setStyleSheet(f"color:{theme.MUTED}; font-size:10px;")
+        v.addWidget(self.delta)
 
     def set(self, valor, sub=""):
         self.valor.setText(str(valor)); self.delta.setText(sub)
@@ -721,45 +924,58 @@ class DashboardSection(QWidget):
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self); lay.setContentsMargins(24, 18, 24, 18); lay.setSpacing(14)
-        lay.addWidget(QLabel("<b>Dashboard operacional</b>"))
+
+        title = QLabel("Dashboard operacional")
+        title.setObjectName("sectionTitle")
+        lay.addWidget(title)
 
         # linha 1 de KPIs
         l1 = QHBoxLayout()
-        self.k_online = KpiCard("Câmeras online", theme.OK)
-        self.k_uptime = KpiCard("Disponibilidade (sessão)", theme.OK)
-        self.k_agora = KpiCard("Objetos no quadro")
-        self.k_pico = KpiCard("Pico na sessão", theme.ACCENT_2)
+        self.k_online = KpiCard("Câmeras online", theme.OK, "📹")
+        self.k_uptime = KpiCard("Disponibilidade", theme.OK, "📊")
+        self.k_agora = KpiCard("Objetos no quadro", theme.ACCENT, "🎯")
+        self.k_pico = KpiCard("Pico na sessão", theme.ACCENT_2, "📈")
         for k in (self.k_online, self.k_uptime, self.k_agora, self.k_pico):
             l1.addWidget(k)
         lay.addLayout(l1)
 
-        # linha 2 de KPIs (negócio)
+        # linha 2 de KPIs
         l2 = QHBoxLayout()
-        self.k_veic = KpiCard("Veículos", theme.ACCENT)
-        self.k_pess = KpiCard("Pessoas", theme.ACCENT_2)
-        self.k_fluxo = KpiCard("Fluxo médio (obj/s, 60s)")
-        self.k_eventos = KpiCard("Eventos registrados", theme.MUTED)
+        self.k_veic = KpiCard("Veículos", theme.ACCENT, "🚗")
+        self.k_pess = KpiCard("Pessoas", theme.ACCENT_2, "👤")
+        self.k_fluxo = KpiCard("Fluxo médio", theme.ACCENT, "⚡")
+        self.k_eventos = KpiCard("Eventos", theme.MUTED, "📋")
         for k in (self.k_veic, self.k_pess, self.k_fluxo, self.k_eventos):
             l2.addWidget(k)
         lay.addLayout(l2)
 
         # fluxo no tempo
-        lay.addWidget(QLabel("Fluxo de objetos — últimos 90s"))
+        fluxo_label = QLabel("Fluxo de objetos — últimos 90s")
+        fluxo_label.setStyleSheet(f"color:{theme.MUTED}; font-size:11px; font-weight:600; padding-top:8px;")
+        lay.addWidget(fluxo_label)
         self.spark = Sparkline(); lay.addWidget(self.spark)
 
-        # ranking de câmeras + barras por classe lado a lado
+        # ranking + barras
         bottom = QHBoxLayout()
+
         col_a = QVBoxLayout()
-        col_a.addWidget(QLabel("Câmeras mais movimentadas"))
+        rank_label = QLabel("Câmeras mais movimentadas")
+        rank_label.setStyleSheet(f"color:{theme.MUTED}; font-size:11px; font-weight:600; padding-top:8px;")
+        col_a.addWidget(rank_label)
         self.ranking = QTableWidget(0, 2)
         self.ranking.setHorizontalHeaderLabels(["Câmera", "Objetos"])
         self.ranking.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.ranking.verticalHeader().setVisible(False)
         self.ranking.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.ranking.setTooltip("Top 6 câmeras com mais detecções")
         col_a.addWidget(self.ranking)
+
         col_b = QVBoxLayout()
-        col_b.addWidget(QLabel("Objetos por classe (ao vivo)"))
+        classes_label = QLabel("Objetos por classe (ao vivo)")
+        classes_label.setStyleSheet(f"color:{theme.MUTED}; font-size:11px; font-weight:600; padding-top:8px;")
+        col_b.addWidget(classes_label)
         self.barras_box = QVBoxLayout(); col_b.addLayout(self.barras_box); col_b.addStretch(1)
+
         bottom.addLayout(col_a, 1); bottom.addLayout(col_b, 1)
         lay.addLayout(bottom)
         self.barras = {}
@@ -805,7 +1021,7 @@ class DashboardSection(QWidget):
 
 
 class CamerasSection(QWidget):
-    """Gestão da lista de câmeras."""
+    """Gestão da lista de câmeras — com empty state."""
 
     alterado = Signal()
 
@@ -813,29 +1029,59 @@ class CamerasSection(QWidget):
         super().__init__()
         self.cameras = cameras
         lay = QVBoxLayout(self); lay.setContentsMargins(16, 12, 16, 16)
-        lay.addWidget(QLabel("<b>Câmeras</b> — gestão da lista"))
+
+        title = QLabel("Gestão de câmeras")
+        title.setObjectName("sectionTitle")
+        lay.addWidget(title)
+
+        self.empty_label = QLabel("Nenhuma câmera cadastrada.\nAdicione câmeras usando o formulário abaixo.")
+        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setStyleSheet(f"color:{theme.MUTED}; font-size:13px; padding:40px;")
+        lay.addWidget(self.empty_label)
+
         self.tabela = QTableWidget(0, 4)
         self.tabela.setHorizontalHeaderLabels(["Nome", "Categoria", "Tipo", "URL"])
         self.tabela.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.tabela.verticalHeader().setVisible(False)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabela.setTooltip("Lista de câmeras cadastradas")
+        self.tabela.hide()
         lay.addWidget(self.tabela)
+
         form = QHBoxLayout()
+        form.setSpacing(8)
         self.in_nome = QLineEdit(); self.in_nome.setPlaceholderText("Nome")
+        self.in_nome.setTooltip("Nome descritivo da câmera")
         self.in_cat = QLineEdit(); self.in_cat.setPlaceholderText("Categoria")
+        self.in_cat.setTooltip("Grupo/categoria (ex: Entrada, Estacionamento)")
         self.in_url = QLineEdit(); self.in_url.setPlaceholderText("rtsp:// ou .m3u8")
-        add = QPushButton("Adicionar"); add.setObjectName("primary"); add.clicked.connect(self._add)
-        rem = QPushButton("Remover selecionada"); rem.clicked.connect(self._rem)
+        self.in_url.setTooltip("URL RTSP (rtsp://...) ou HLS (http...m3u8)")
+        add = QPushButton("＋ Adicionar")
+        add.setObjectName("primary")
+        add.setTooltip("Adiciona a câmera à lista")
+        add.clicked.connect(self._add)
+        rem = QPushButton("✕ Remover")
+        rem.setObjectName("danger")
+        rem.setTooltip("Remove a câmera selecionada")
+        rem.clicked.connect(self._rem)
         form.addWidget(self.in_nome); form.addWidget(self.in_cat)
         form.addWidget(self.in_url, 1); form.addWidget(add); form.addWidget(rem)
         lay.addLayout(form)
-        aviso = QLabel("As mudanças são salvas em cameras.json. Reinicie o app para "
-                       "recriar as abas do mural.")
-        aviso.setObjectName("camMeta"); lay.addWidget(aviso)
+
+        aviso = QLabel("As mudanças são salvas automaticamente. Reinicie o app para atualizar o mural.")
+        aviso.setStyleSheet(f"color:{theme.MUTED}; font-size:10px; font-style:italic;")
+        lay.addWidget(aviso)
+        lay.addStretch()
         self._refresh()
 
     def _refresh(self):
         self.tabela.setRowCount(0)
+        if not self.cameras:
+            self.tabela.hide()
+            self.empty_label.show()
+            return
+        self.empty_label.hide()
+        self.tabela.show()
         for c in self.cameras:
             r = self.tabela.rowCount(); self.tabela.insertRow(r)
             self.tabela.setItem(r, 0, QTableWidgetItem(c["nome"]))
@@ -881,25 +1127,115 @@ class ConfigSection(QWidget):
         super().__init__()
         self.cfg = cfg
         lay = QVBoxLayout(self); lay.setContentsMargins(24, 20, 24, 20)
-        lay.addWidget(QLabel("<b>Configurações</b> — performance e IA"))
+
+        title = QLabel("Configurações")
+        title.setObjectName("sectionTitle")
+        lay.addWidget(title)
+
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        conteudo = QWidget()
+        cl = QVBoxLayout(conteudo); cl.setContentsMargins(0, 0, 0, 0)
+
+        # Performance
+        perf_title = QLabel("Performance e IA")
+        perf_title.setStyleSheet(f"color:{theme.ACCENT}; font-size:13px; font-weight:700; padding-top:12px;")
+        cl.addWidget(perf_title)
+
         form = QFormLayout()
+        form.setSpacing(10)
         self.sp_skip = QSpinBox(); self.sp_skip.setRange(1, 30); self.sp_skip.setValue(cfg["detectar_a_cada"])
+        self.sp_skip.setTooltip("Executar detecção a cada N frames (menor = mais IA)")
         self.sp_imgsz = QComboBox(); self.sp_imgsz.addItems(["320", "416", "480", "576", "640"])
         self.sp_imgsz.setCurrentText(str(cfg["imgsz"]))
+        self.sp_imgsz.setTooltip("Resolução de inferência (maior = mais preciso, mais lento)")
         self.sp_conf = QSpinBox(); self.sp_conf.setRange(10, 90); self.sp_conf.setSuffix(" %")
         self.sp_conf.setValue(int(cfg["confianca"] * 100))
+        self.sp_conf.setTooltip("Confiança mínima para considerar uma detecção")
         self.sp_fps = QSpinBox(); self.sp_fps.setRange(1, 60); self.sp_fps.setValue(cfg["fps_max"])
+        self.sp_fps.setTooltip("Limite de frames por segundo por câmera")
         self.sp_col = QSpinBox(); self.sp_col.setRange(1, 4); self.sp_col.setValue(cfg["colunas"])
+        self.sp_col.setTooltip("Número de colunas no mural de câmeras")
         form.addRow("Detectar a cada N frames:", self.sp_skip)
         form.addRow("Resolução de inferência (imgsz):", self.sp_imgsz)
         form.addRow("Confiança mínima:", self.sp_conf)
         form.addRow("FPS máximo por câmera:", self.sp_fps)
         form.addRow("Colunas do mural:", self.sp_col)
-        lay.addLayout(form)
-        salvar = QPushButton("Salvar configurações"); salvar.setObjectName("primary")
+        cl.addLayout(form)
+
+        # Privacy Masking
+        priv_title = QLabel("Privacy Masking")
+        priv_title.setStyleSheet(f"color:{theme.ACCENT}; font-size:13px; font-weight:700; padding-top:16px;")
+        cl.addWidget(priv_title)
+        priv_sub = QLabel("Zonas de exclusão onde pessoas são pixeladas automaticamente.")
+        priv_sub.setStyleSheet(f"color:{theme.MUTED}; font-size:11px;")
+        cl.addWidget(priv_sub)
+
+        masks = cfg.get("privacy_masks", {})
+        self.mask_table = QTableWidget(len(masks) or 0, 2)
+        self.mask_table.setHorizontalHeaderLabels(["Câmera (URL)", "Polígono (JSON)"])
+        self.mask_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.mask_table.setTooltip("Polígonos de privacidade definidos")
+        for r, (url, zona) in enumerate(masks.items()):
+            self.mask_table.setItem(r, 0, QTableWidgetItem(url))
+            self.mask_table.setItem(r, 1, QTableWidgetItem(json.dumps(zona)))
+        cl.addWidget(self.mask_table)
+
+        mask_bar = QHBoxLayout()
+        mask_bar.setSpacing(8)
+        self.in_mask_url = QLineEdit(); self.in_mask_url.setPlaceholderText("URL da câmera")
+        self.in_mask_url.setTooltip("URL exata da câmera para aplicar a máscara")
+        self.in_mask_pontos = QLineEdit()
+        self.in_mask_pontos.setPlaceholderText("[[0.1,0.1],[0.9,0.1],[0.9,0.9],[0.1,0.9]]")
+        self.in_mask_pontos.setTooltip("Coordenadas proporcionais (0.0-1.0) dos vértices do polígono")
+        btn_add_mask = QPushButton("＋ Adicionar zona")
+        btn_add_mask.setTooltip("Adiciona zona de exclusão")
+        btn_add_mask.clicked.connect(self._add_mask)
+        btn_rem_mask = QPushButton("✕ Remover")
+        btn_rem_mask.setObjectName("danger")
+        btn_rem_mask.setTooltip("Remove a zona selecionada")
+        btn_rem_mask.clicked.connect(self._rem_mask)
+        mask_bar.addWidget(self.in_mask_url); mask_bar.addWidget(self.in_mask_pontos, 1)
+        mask_bar.addWidget(btn_add_mask); mask_bar.addWidget(btn_rem_mask)
+        cl.addLayout(mask_bar)
+        cl.addStretch(1)
+        scroll.setWidget(conteudo)
+        lay.addWidget(scroll, 1)
+
+        salvar = QPushButton("💾 Salvar configurações")
+        salvar.setObjectName("primary")
+        salvar.setTooltip("Salva as configurações (reinício necessário)")
         salvar.clicked.connect(self._salvar)
         lay.addWidget(salvar, alignment=Qt.AlignLeft)
-        lay.addStretch(1)
+
+    def _add_mask(self):
+        url = self.in_mask_url.text().strip()
+        try:
+            pontos = json.loads(self.in_mask_pontos.text())
+        except json.JSONDecodeError:
+            QMessageBox.warning(self, "Erro", "JSON inválido para polígono.")
+            return
+        if not isinstance(pontos, list) or len(pontos) < 3:
+            QMessageBox.warning(self, "Erro", "Polígono precisa de pelo menos 3 pontos.")
+            return
+        masks = self.cfg.get("privacy_masks", {})
+        masks[url] = pontos
+        self.cfg["privacy_masks"] = masks
+        r = self.mask_table.rowCount(); self.mask_table.insertRow(r)
+        self.mask_table.setItem(r, 0, QTableWidgetItem(url))
+        self.mask_table.setItem(r, 1, QTableWidgetItem(json.dumps(pontos)))
+        self.in_mask_url.clear(); self.in_mask_pontos.clear()
+
+    def _rem_mask(self):
+        r = self.mask_table.currentRow()
+        if r < 0:
+            return
+        url_item = self.mask_table.item(r, 0)
+        if url_item:
+            masks = self.cfg.get("privacy_masks", {})
+            masks.pop(url_item.text(), None)
+            self.cfg["privacy_masks"] = masks
+        self.mask_table.removeRow(r)
 
     def _salvar(self):
         self.cfg.update({
@@ -918,11 +1254,14 @@ class ConfigSection(QWidget):
 # Janela principal
 # ====================================================================
 class Janela(QMainWindow):
-    def __init__(self, ia_inicial=True):
+    def __init__(self, ia_inicial=True, usuario=None):
         super().__init__()
         self.setWindowTitle("vigia-cam")
         self.resize(1280, 840)
+        self.usuario = usuario or {"perfil": "admin"}
         self.cameras = carregar_cameras()
+        self.cameras = [c for c in self.cameras
+                        if servicos.usuario_pode_acessar(self.usuario, c["url"])]
         self.grupos = agrupar_por_categoria(self.cameras)
         self.detector = None
         self._ia_inicial = ia_inicial
@@ -946,25 +1285,28 @@ class Janela(QMainWindow):
         col = QVBoxLayout(root); col.setContentsMargins(0, 0, 0, 0); col.setSpacing(0)
         col.addWidget(self._header())
 
+        perfil = self.usuario.get("perfil", "admin")
         self.nav = QTabWidget(); self.nav.setObjectName("nav"); self.nav.setDocumentMode(True)
         self.sec_ao_vivo = AoVivoSection(self.grupos, lambda: self.detector, self._on_evento)
         self.sec_eventos = EventosSection()
         self.sec_dash = DashboardSection()
-        self.sec_cam = CamerasSection(self.cameras)
-        self.sec_cfg = ConfigSection(CFG)
+        self.sec_cam = CamerasSection(self.cameras) if perfil == "admin" else None
+        self.sec_cfg = ConfigSection(CFG) if perfil == "admin" else None
         self.nav.addTab(self.sec_ao_vivo, "  ● Ao Vivo  ")
-        self.nav.addTab(self.sec_eventos, "  Eventos  ")
-        self.nav.addTab(self.sec_dash, "  Dashboard  ")
-        self.nav.addTab(self.sec_cam, "  Câmeras  ")
-        self.nav.addTab(self.sec_cfg, "  Configurações  ")
+        self.nav.addTab(self.sec_eventos, "  📋 Eventos  ")
+        self.nav.addTab(self.sec_dash, "  📊 Dashboard  ")
+        if self.sec_cam is not None:
+            self.nav.addTab(self.sec_cam, "  📹 Câmeras  ")
+        if self.sec_cfg is not None:
+            self.nav.addTab(self.sec_cfg, "  ⚙ Configurações  ")
         col.addWidget(self.nav, 1)
-        self.statusBar().showMessage("Pronto")
+        self.statusBar().showMessage(f"Conectado como {self.usuario.get('usuario', '?')} ({perfil})")
 
         self._timer = QTimer(self); self._timer.timeout.connect(self._tick); self._timer.start(1000)
 
     def _header(self):
-        h = QFrame(); h.setObjectName("header"); h.setFixedHeight(60)
-        lay = QHBoxLayout(h); lay.setContentsMargins(18, 0, 18, 0)
+        h = QFrame(); h.setObjectName("header"); h.setFixedHeight(64)
+        lay = QHBoxLayout(h); lay.setContentsMargins(20, 0, 20, 0)
         marca = QHBoxLayout(); marca.setSpacing(0)
         logo = QLabel("VIGIA"); logo.setObjectName("logo")
         dot = QLabel("•CAM"); dot.setObjectName("logoDot")
@@ -972,10 +1314,25 @@ class Janela(QMainWindow):
         bloco = QVBoxLayout(); bloco.setSpacing(0); bloco.addLayout(marca)
         sub = QLabel("monitoramento ao vivo · detecção por IA"); sub.setObjectName("subtitle")
         bloco.addWidget(sub); lay.addLayout(bloco); lay.addStretch(1)
-        self.chk_det = QCheckBox("Detecção IA"); self.chk_det.setChecked(self._ia_inicial)
-        self.chk_det.stateChanged.connect(self._toggle_detector); lay.addWidget(self.chk_det)
-        self.clock = QLabel(""); self.clock.setObjectName("clock")
-        lay.addSpacing(18); lay.addWidget(self.clock)
+
+        self.chk_det = QCheckBox("Detecção IA")
+        self.chk_det.setChecked(self._ia_inicial)
+        self.chk_det.setTooltip("Ativa/desativa a detecção de objetos por IA")
+        self.chk_det.stateChanged.connect(self._toggle_detector)
+        lay.addWidget(self.chk_det)
+
+        lay.addSpacing(12)
+
+        self.user_label = QLabel(f"👤 {self.usuario.get('usuario', '?')}")
+        self.user_label.setStyleSheet(
+            f"color:{theme.MUTED}; font-size:11px; background:{theme.CARD}; "
+            f"border:1px solid {theme.BORDER}; border-radius:6px; padding:4px 10px;")
+        self.user_label.setTooltip(f"Perfil: {self.usuario.get('perfil', '?')}")
+        lay.addWidget(self.user_label)
+
+        self.clock = QLabel("")
+        self.clock.setObjectName("clock")
+        lay.addSpacing(12); lay.addWidget(self.clock)
         return h
 
     # ---------- detector ----------
@@ -1058,7 +1415,19 @@ if __name__ == "__main__":
         CAMERAS_JSON = args.cameras
     CFG = carregar_config()
 
-    app = QApplication(sys.argv)
-    app.setStyleSheet(theme.QSS)
-    janela = Janela(ia_inicial=not args.sem_ia)
-    sys.exit(app.exec())
+    if args.api:
+        import uvicorn
+        from api import app as fastapi_app
+        print(f"Iniciando REST API na porta {args.api_port}...")
+        uvicorn.run(fastapi_app, host="0.0.0.0", port=args.api_port)
+    else:
+        app = QApplication(sys.argv)
+        app.setStyleSheet(theme.QSS)
+
+        login = LoginDialog()
+        login.setStyleSheet(theme.QSS)
+        if login.exec() != QDialog.Accepted:
+            sys.exit(0)
+
+        janela = Janela(ia_inicial=not args.sem_ia, usuario=login.usuario_logado)
+        sys.exit(app.exec())
