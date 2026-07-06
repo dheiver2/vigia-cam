@@ -16,11 +16,19 @@ struct CameraCardView: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topTrailing) {
                     if let img = vm.frameImage {
-                        Image(nsImage: img)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(height: 140)
-                            .clipped()
+                        ZStack {
+                            Image(nsImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(height: 140)
+                                .clipped()
+                            // Bounding boxes overlay
+                            if !vm.lastDetections.isEmpty {
+                                DetectionOverlay(detections: vm.lastDetections, imageSize: img.size)
+                                    .frame(height: 140)
+                                    .clipped()
+                            }
+                        }
                     } else {
                         Rectangle()
                             .fill(VigiaTheme.bg)
@@ -39,6 +47,15 @@ struct CameraCardView: View {
                         Spacer()
                         FPSCaption(fps: vm.fps)
                     }.padding(8)
+                    if !vm.detectionCount.isEmpty {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                DetectionChips(count: vm.detectionCount)
+                                Spacer()
+                            }.padding(6)
+                        }
+                    }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -63,6 +80,37 @@ struct CameraCardView: View {
         .onDisappear { vm.stop() }
         .sheet(isPresented: $showingDetail) {
             CameraDetailView(camera: camera)
+        }
+    }
+}
+
+struct DetectionOverlay: View {
+    let detections: [Detection]
+    let imageSize: NSSize
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(detections) { det in
+                let box = det.boundingBox
+                let x = box.origin.x * geo.size.width
+                let y = (1.0 - box.origin.y - box.size.height) * geo.size.height
+                let w = box.size.width * geo.size.width
+                let h = box.size.height * geo.size.height
+
+                ZStack(alignment: .topLeading) {
+                    Rectangle()
+                        .stroke(Detection.color(for: det.label), lineWidth: 2)
+                        .frame(width: w, height: h)
+                        .position(x: x + w/2, y: y + h/2)
+                    Text("\(det.label) \(Int(det.confidence * 100))%")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 2)
+                        .background(Detection.color(for: det.label))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .position(x: x + w/2, y: y - 8)
+                }
+            }
         }
     }
 }

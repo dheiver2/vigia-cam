@@ -11,7 +11,9 @@ let package = Package(
         .executableTarget(
             name: "VigiaCam",
             path: "Sources/VigiaCam",
-            exclude: ["Resources"]
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "VigiaCamTests",
