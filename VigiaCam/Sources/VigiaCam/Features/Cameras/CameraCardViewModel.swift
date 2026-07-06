@@ -13,6 +13,7 @@ class CameraCardViewModel: ObservableObject {
     private let cameraService = CameraService()
     private let detector = DetectorService()
     private var detectTimer: Timer?
+    private var frameCount = 0
 
     init(camera: Camera) {
         self.camera = camera
@@ -25,6 +26,7 @@ class CameraCardViewModel: ObservableObject {
 
     func start() {
         guard !cameraService.isRunning else { return }
+        print("[CardVM] Starting \(camera.nome)")
         switch camera.tipo {
         case .hls, .rtsp:
             cameraService.startHLSStream(url: camera.url)
@@ -44,10 +46,17 @@ class CameraCardViewModel: ObservableObject {
         detectTimer?.invalidate()
         detectTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            guard let frame = self.cameraService.currentFrame else { return }
-            let imgCopy = frame.copy() as! NSImage
+            guard let frame = self.cameraService.currentFrame else {
+                print("[CardVM] No frame yet for \(self.camera.nome)")
+                return
+            }
+            self.frameCount += 1
+            if self.frameCount % 5 == 0 {
+                print("[CardVM] Detecting frame #\(self.frameCount) for \(self.camera.nome)")
+            }
+            guard let copy = frame.copy() as? NSImage else { return }
             DispatchQueue.global(qos: .utility).async {
-                self.detector.detectar(imgCopy)
+                let _ = self.detector.detectar(copy)
             }
         }
         RunLoop.main.add(detectTimer!, forMode: .default)

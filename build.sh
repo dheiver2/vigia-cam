@@ -12,6 +12,19 @@ mkdir -p VigiaCam.app/Contents/MacOS
 mkdir -p VigiaCam.app/Contents/Resources
 cp VigiaCam/.build/release/VigiaCam VigiaCam.app/Contents/MacOS/VigiaCam
 
+# Copy model to Resources
+if [ -d "VigiaCam/Sources/VigiaCam/Resources/yolov8n.mlpackage" ]; then
+    cp -R VigiaCam/Sources/VigiaCam/Resources/yolov8n.mlpackage VigiaCam.app/Contents/Resources/
+    echo "📦 Copied yolov8n.mlpackage to bundle"
+fi
+
+# Copy SPM resource bundle if exists
+SPM_RESOURCES=$(find VigiaCam/.build -name "VigiaCam_VigiaCam.bundle" -type d 2>/dev/null | head -1)
+if [ -n "$SPM_RESOURCES" ]; then
+    cp -R "$SPM_RESOURCES" VigiaCam.app/Contents/Resources/
+    echo "📦 Copied SPM resource bundle"
+fi
+
 cat > VigiaCam.app/Contents/Info.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -40,8 +53,6 @@ cat > VigiaCam.app/Contents/Info.plist << 'EOF'
     <key>NSMicrophoneUsageDescription</key>
     <string>VigiaCam pode gravar áudio junto com vídeo.</string>
     <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSSupportsAutomaticTermination</key>
     <true/>
 </dict>
 </plist>
