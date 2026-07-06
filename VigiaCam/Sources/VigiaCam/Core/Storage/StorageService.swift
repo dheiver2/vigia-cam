@@ -31,6 +31,33 @@ final class StorageService: ObservableObject {
         }
     }
 
+    // MARK: - Caminhos de evidência (organizados por câmera/dia)
+
+    private func slug(_ nome: String) -> String {
+        let permitido = CharacterSet(charactersIn:
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        let s = String(nome.unicodeScalars.map { permitido.contains($0) ? Character($0) : "-" })
+        let limpo = s.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return limpo.isEmpty ? "camera" : limpo
+    }
+
+    func caminhoGravacao(camera: String) -> URL {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let dia = f.string(from: Date())
+        let dir = dirGravacoes.appendingPathComponent(slug(camera)).appendingPathComponent(dia)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        f.dateFormat = "HHmmss"
+        return dir.appendingPathComponent("\(f.string(from: Date())).mp4")
+    }
+
+    func caminhoCaptura(camera: String) -> URL {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let dir = dirCapturas.appendingPathComponent(f.string(from: Date()))
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        f.dateFormat = "HHmmss"
+        return dir.appendingPathComponent("\(slug(camera))-\(f.string(from: Date())).png")
+    }
+
     // MARK: - Raw File I/O
 
     func salvarRaw(_ data: Data, para filename: String) {

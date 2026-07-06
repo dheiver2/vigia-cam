@@ -3,12 +3,18 @@ import SwiftUI
 struct CameraDetailView: View {
     let camera: Camera
     @StateObject private var vm: CameraCardViewModel
+    @ObservedObject private var rec = RecordingService.shared
+    @ObservedObject private var privacy = PrivacyService.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var editandoPrivacidade = false
+    @State private var arrasto: CGRect?
 
     init(camera: Camera) {
         self.camera = camera
         _vm = StateObject(wrappedValue: CameraCardViewModel(camera: camera))
     }
+
+    private var gravando: Bool { rec.estaGravando(camera.nome) }
 
     var body: some View {
         ZStack {
@@ -21,7 +27,11 @@ struct CameraDetailView: View {
                     Spacer()
                     Text(camera.nome).font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                     Spacer()
-                    HStack(spacing: 8) { LiveBadge(); FPSCaption(fps: vm.fps) }
+                    HStack(spacing: 8) {
+                        if gravando { RecBadge() }
+                        if vm.isOnline { LiveBadge() } else { OfflineBadge() }
+                        FPSCaption(fps: vm.fps)
+                    }
                 }.padding(.horizontal, 16).padding(.vertical, 12).background(VigiaTheme.headerGradient)
 
                 ZStack {
@@ -29,9 +39,15 @@ struct CameraDetailView: View {
                         Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .overlay(
-                                DetectionOverlay(detections: vm.lastDetections),
+                                DetectionOverlay(detections: vm.lastDetections,
+                                                 imageSize: img.size,
+                                                 contentMode: .fit),
                                 alignment: .center
                             )
+                            .overlay(
+                                PrivacyMaskOverlay(cameraURL: camera.url,
+                                                   imageSize: img.size, contentMode: .fit))
+                            .overlay(editorPrivacidade(imageSize: img.size))
                     } else {
                         VStack(spacing: 12) {
                             ProgressView().tint(VigiaTheme.accent)
@@ -39,6 +55,29 @@ struct CameraDetailView: View {
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }.background(Color.black)
+
+                // Barra de ações (evidência + privacidade LGPD)
+                HStack(spacing: 8) {
+                    acao("camera.fill", "Snapshot", VigiaTheme.accent2) { vm.capturarSnapshot() }
+                    acao(gravando ? "stop.fill" : "record.circle",
+                         gravando ? "Parar" : "Gravar",
+                         gravando ? VigiaTheme.danger : VigiaTheme.text) { vm.alternarGravacao() }
+                    Divider().frame(height: 20)
+                    acao(editandoPrivacidade ? "checkmark.circle.fill" : "eye.slash",
+                         editandoPrivacidade ? "Concluir zona" : "Zona LGPD",
+                         editandoPrivacidade ? VigiaTheme.ok : VigiaTheme.text) {
+                        editandoPrivacidade.toggle()
+                    }
+                    if !privacy.zonasDe(camera.url).isEmpty {
+                        acao("arrow.uturn.backward", "Desfazer", VigiaTheme.muted) { privacy.removerUltima(camera.url) }
+                        acao("trash", "Limpar zonas", VigiaTheme.danger) { privacy.limpar(camera.url) }
+                    }
+                    Spacer()
+                    if editandoPrivacidade {
+                        Text("Arraste sobre o vídeo para tampar uma área")
+                            .font(.system(size: 11)).foregroundColor(VigiaTheme.warning)
+                    }
+                }.padding(.horizontal, 12).padding(.vertical, 8).background(VigiaTheme.panel)
 
                 if !vm.detectionCount.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -75,4 +114,60 @@ struct CameraDetailView: View {
         .onAppear { vm.start() }
         .onDisappear { vm.stop() }
     }
+
+    private func acao(_ icon: String, _ titulo: String, _ cor: Color, _ f: @escaping () -> Void) -> some View {
+        Button(action: f) {
+            HStack(spacing: 5) {
+                Image(systemName: icon); Text(titulo)
+            }.font(.system(size: 12, weight: .semibold)).foregroundColor(cor)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 6))
+        }.buttonStyle(.plain)
+    }
+
+    /// Camada de desenho de zona de privacidade (arrasto normaliza p/ 0–1).
+    @ViewBuilder
+    private func editorPrivacidade(imageSize: CGSize) -> some View {
+        if editandoPrivacidade {
+            GeometryReader { geo in
+                let rect = fittedRect(container: geo.size, image: imageSize, mode: .fit)
+                ZStack {
+                    Color.white.opacity(0.001)   // captura o gesto
+                    if let a = arrasto {
+                        Rectangle().stroke(VigiaTheme.warning, lineWidth: 2)
+                            .background(Color.warningFill)
+                            .frame(width: a.width, height: a.height)
+                            .position(x: a.midX, y: a.midY)
+                    }
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 4)
+                        .onChanged { v in
+                            arrasto = CGRect(x: min(v.startLocation.x, v.location.x),
+                                             y: min(v.startLocation.y, v.location.y),
+                                             width: abs(v.location.x - v.startLocation.x),
+                                             height: abs(v.location.y - v.startLocation.y))
+                        }
+                        .onEnded { _ in
+                            if let a = arrasto, a.width > 6, a.height > 6, rect.width > 0 {
+                                let norm = CGRect(x: (a.minX - rect.minX) / rect.width,
+                                                  y: (a.minY - rect.minY) / rect.height,
+                                                  width: a.width / rect.width,
+                                                  height: a.height / rect.height)
+                                    .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+                                if norm.width > 0.01, norm.height > 0.01 {
+                                    privacy.adicionar(camera.url, rect: norm)
+                                }
+                            }
+                            arrasto = nil
+                        }
+                )
+            }
+        }
+    }
+}
+
+extension Color {
+    static let warningFill = VigiaTheme.warning.opacity(0.2)
 }

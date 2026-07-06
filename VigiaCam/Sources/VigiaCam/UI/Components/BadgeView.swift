@@ -25,6 +25,23 @@ struct OfflineBadge: View {
     }
 }
 
+struct RecBadge: View {
+    @State private var pulsando = false
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle().fill(Color.white).frame(width: 6, height: 6)
+                .opacity(pulsando ? 0.25 : 1)
+            Text("REC").font(.system(size: 9, weight: .black)).foregroundColor(.white)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 2)
+        .background(VigiaTheme.danger)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) { pulsando = true }
+        }
+    }
+}
+
 struct FPSCaption: View {
     let fps: Double
     var body: some View {

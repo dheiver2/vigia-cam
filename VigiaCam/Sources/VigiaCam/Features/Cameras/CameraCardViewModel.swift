@@ -14,6 +14,8 @@ class CameraCardViewModel: ObservableObject {
     private let detector = DetectorService()
     private var detectTimer: Timer?
     private var frameCount = 0
+    private var isDetecting = false
+    private var bag = Set<AnyCancellable>()
 
     init(camera: Camera) {
         self.camera = camera
@@ -22,6 +24,38 @@ class CameraCardViewModel: ObservableObject {
         cameraService.$isRunning.assign(to: &$isOnline)
         detector.$detectionCount.assign(to: &$detectionCount)
         detector.$lastDetections.assign(to: &$lastDetections)
+
+        // detecção -> motor de alarmes
+        detector.$detectionCount
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] counts in
+                guard let self, !counts.isEmpty else { return }
+                AlarmService.shared.avaliar(camera: self.camera.nome, counts: counts)
+            }
+            .store(in: &bag)
+
+        // frame -> gravação (quando a câmera está gravando)
+        cameraService.$currentFrame
+            .compactMap { $0 }
+            .sink { [weak self] img in
+                guard let self, RecordingService.shared.estaGravando(self.camera.nome) else { return }
+                RecordingService.shared.alimentar(self.camera.nome, image: img)
+            }
+            .store(in: &bag)
+    }
+
+    /// Snapshot do frame atual como evidência (PNG + cadeia de custódia).
+    @discardableResult
+    func capturarSnapshot() -> URL? {
+        guard let img = frameImage else { return nil }
+        return RecordingService.shared.snapshot(img, camera: camera.nome)
+    }
+
+    /// Liga/desliga a gravação manual de clipe.
+    func alternarGravacao() {
+        let tamanho = frameImage?.size ?? CGSize(width: 1280, height: 720)
+        RecordingService.shared.alternarGravacao(camera.nome, tamanho: tamanho,
+                                                 fps: 10)
     }
 
     func start() {
@@ -44,19 +78,18 @@ class CameraCardViewModel: ObservableObject {
 
     private func startDetection() {
         detectTimer?.invalidate()
-        detectTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        // ~2,5 Hz: acompanha objetos em movimento sem empilhar inferências.
+        // O YOLOv8n roda no Neural Engine em poucos ms, então o custo é baixo.
+        detectTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
             guard let self else { return }
-            guard let frame = self.cameraService.currentFrame else {
-                print("[CardVM] No frame yet for \(self.camera.nome)")
-                return
-            }
-            self.frameCount += 1
-            if self.frameCount % 5 == 0 {
-                print("[CardVM] Detecting frame #\(self.frameCount) for \(self.camera.nome)")
-            }
-            guard let copy = frame.copy() as? NSImage else { return }
-            DispatchQueue.global(qos: .utility).async {
-                let _ = self.detector.detectar(copy)
+            // pula se a inferência anterior ainda não terminou — evita fila de
+            // frames velhos, que é justamente o que causa caixas "atrasadas".
+            guard !self.isDetecting, let frame = self.cameraService.currentFrame else { return }
+            self.isDetecting = true
+            guard let copy = frame.copy() as? NSImage else { self.isDetecting = false; return }
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = self.detector.detectar(copy)
+                self.isDetecting = false
             }
         }
         RunLoop.main.add(detectTimer!, forMode: .default)

@@ -3,13 +3,86 @@ import CoreML
 import AppKit
 import SwiftUI
 
+/// Carrega e compila o modelo YOLOv8n UMA ÚNICA vez para todo o app.
+///
+/// `.mlpackage` NÃO pode ser aberto direto por `MLModel(contentsOf:)` — o
+/// CoreML exige um `.mlmodelc` compilado. Aqui compilamos com
+/// `MLModel.compileModel(at:)` (resultado cacheado em Application Support) e
+/// reaproveitamos o mesmo `VNCoreMLModel` em todas as câmeras, em vez de pagar
+/// compilação + carga N vezes (uma por card).
+enum ModelProvider {
+    enum Estado { case ok(VNCoreMLModel), semArquivo, erro(String) }
+
+    private static let lock = NSLock()
+    private static var cache: Estado?
+
+    static func shared() -> Estado {
+        lock.lock(); defer { lock.unlock() }
+        if let cache { return cache }
+        let estado = carregar()
+        cache = estado
+        return estado
+    }
+
+    private static func candidatos() -> [URL] {
+        var urls: [URL] = []
+        if let u = Bundle.main.url(forResource: "yolov8n", withExtension: "mlpackage") {
+            urls.append(u)
+        }
+        let bp = Bundle.main.bundlePath
+        for p in ["/Contents/Resources/yolov8n.mlpackage",
+                  "/Contents/Resources/VigiaCam_VigiaCam.bundle/Contents/Resources/yolov8n.mlpackage",
+                  "/Contents/Resources/VigiaCam_VigiaCam.bundle/yolov8n.mlpackage"] {
+            urls.append(URL(fileURLWithPath: bp + p))
+        }
+        return urls
+    }
+
+    private static func compiladoCache(para origem: URL) -> URL {
+        let sup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("VigiaCam", isDirectory: true)
+        try? FileManager.default.createDirectory(at: sup, withIntermediateDirectories: true)
+        return sup.appendingPathComponent("yolov8n.mlmodelc", isDirectory: true)
+    }
+
+    private static func carregar() -> Estado {
+        guard let origem = candidatos().first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+            print("[Detector] modelo não encontrado no bundle")
+            return .semArquivo
+        }
+        do {
+            // reaproveita o .mlmodelc já compilado se existir (compilar é caro)
+            let cacheURL = compiladoCache(para: origem)
+            let compiladoURL: URL
+            if FileManager.default.fileExists(atPath: cacheURL.path) {
+                compiladoURL = cacheURL
+            } else {
+                let tmp = try MLModel.compileModel(at: origem)
+                try? FileManager.default.removeItem(at: cacheURL)
+                try? FileManager.default.copyItem(at: tmp, to: cacheURL)
+                compiladoURL = FileManager.default.fileExists(atPath: cacheURL.path) ? cacheURL : tmp
+            }
+            let cfg = MLModelConfiguration()
+            cfg.computeUnits = .all                 // Neural Engine + GPU + CPU
+            let ml = try MLModel(contentsOf: compiladoURL, configuration: cfg)
+            let vn = try VNCoreMLModel(for: ml)
+            print("[Detector] YOLOv8n compilado e carregado")
+            return .ok(vn)
+        } catch {
+            print("[Detector] falha ao compilar/carregar: \(error.localizedDescription)")
+            return .erro(error.localizedDescription)
+        }
+    }
+}
+
 final class DetectorService: ObservableObject {
     @Published var isLoaded = false
+    @Published var indisponivel = false          // modelo não pôde ser carregado
     @Published var detectionCount: [String: Int] = [:]
     @Published var lastDetections: [Detection] = []
 
     private var vnModel: VNCoreMLModel?
-    private let confidenceThreshold: Float = 0.25
+    var confidenceThreshold: Float = 0.25
     private let iouThreshold: Float = 0.45
     private let queue = DispatchQueue(label: "detector")
 
@@ -42,36 +115,13 @@ final class DetectorService: ObservableObject {
     private func loadModel() {
         queue.async { [weak self] in
             guard let self else { return }
-
-            let paths = [
-                Bundle.main.bundlePath + "/Contents/Resources/yolov8n.mlpackage",
-                Bundle.main.bundlePath + "/Contents/Resources/VigiaCam_VigiaCam.bundle/yolov8n.mlpackage"
-            ]
-            for path in paths {
-                let url = URL(fileURLWithPath: path)
-                if FileManager.default.fileExists(atPath: path) {
-                    print("[Detector] Trying \(path)")
-                    if let ml = try? MLModel(contentsOf: url),
-                       let vn = try? VNCoreMLModel(for: ml) {
-                        self.vnModel = vn
-                        DispatchQueue.main.async { self.isLoaded = true }
-                        print("[Detector] YOLOv8n loaded!")
-                        return
-                    }
-                }
+            switch ModelProvider.shared() {
+            case .ok(let vn):
+                self.vnModel = vn
+                DispatchQueue.main.async { self.isLoaded = true; self.indisponivel = false }
+            case .semArquivo, .erro:
+                DispatchQueue.main.async { self.isLoaded = false; self.indisponivel = true }
             }
-
-            if let url = Bundle.main.url(forResource: "yolov8n", withExtension: "mlpackage") {
-                if let ml = try? MLModel(contentsOf: url), let vn = try? VNCoreMLModel(for: ml) {
-                    self.vnModel = vn
-                    DispatchQueue.main.async { self.isLoaded = true }
-                    print("[Detector] YOLOv8n loaded via Bundle.main")
-                    return
-                }
-            }
-
-            print("[Detector] Model NOT found!")
-            DispatchQueue.main.async { self.isLoaded = true }
         }
     }
 
@@ -152,8 +202,11 @@ final class DetectorService: ObservableObject {
 
             if bestScore < confidenceThreshold || bestClass < 0 { continue }
 
+            // Convenção Vision: origem no canto INFERIOR-esquerdo, normalizada.
+            // O YOLO devolve cx,cy do canto superior-esquerdo (0..640), então o
+            // Y precisa ser espelhado (640 - baixo) para casar com o overlay.
             let x1 = (cx - w / 2) / 640.0
-            let y1 = (cy - h / 2) / 640.0
+            let y1 = (640.0 - (cy + h / 2)) / 640.0
             let bw = w / 640.0
             let bh = h / 640.0
 
