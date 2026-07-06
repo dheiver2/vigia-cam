@@ -1,104 +1,79 @@
-# vigia-cam
+# VIGIA·CAM
 
 ![CI](https://github.com/dheiver2/vigia-cam/actions/workflows/ci.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Swift](https://img.shields.io/badge/Swift-5.9-orange)
+![Platform](https://img.shields.io/badge/macOS-14%2B-black)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-App desktop (Python + PySide6/Qt + OpenCV) para monitoramento ao vivo de
-câmeras **RTSP** e **HLS (`.m3u8`)** com **detecção de objetos em tempo real**
-via **YOLOv8n** (ultralytics).
+Plataforma **VMS (Video Management System)** nativa para **macOS** que monitora
+múltiplas câmeras **RTSP/HLS** ao vivo em videowall, com **detecção de objetos por
+IA em tempo real** (YOLOv8n via Vision/CoreML no Neural Engine) e recursos de nível
+corporativo pensados para **editais de CFTV e segurança pública** — tudo **100% local**.
+
+🔗 **Página do projeto:** https://dheiver2.github.io/vigia-cam/
+
+![Demonstração do VIGIA·CAM](docs/demo.gif)
 
 ## Funcionalidades
 
-Navegação por abas, no estilo de um VMS (video management system):
-
-| Aba | O que faz |
+| Recurso | Descrição |
 |---|---|
-| **Ao Vivo** | Mural de câmeras por categoria, paginado; clique num card para ampliar |
-| **Eventos** | Log em tempo real das detecções (horário, câmera, objetos) |
-| **Dashboard** | KPIs agregados: câmeras online, disponibilidade, fluxo, ranking |
-| **Câmeras** | Gestão da lista (adicionar/remover) → `cameras.json` |
-| **Configurações** | Ajustes de performance/IA (FPS, resolução, confiança) → `config.json` |
+| **Videowall & Ronda** | Mosaicos 1×1 a 4×4, paginação por categoria, rodízio automático (ronda) e tela cheia |
+| **Detecção por IA** | YOLOv8n on-device (Vision/CoreML), pessoas/veículos e 80+ classes em tempo real |
+| **Alarmes inteligentes** | Regras por classe/limite/câmera (intrusão, aglomeração) com banner ao vivo, som e log |
+| **Evidência forense** | Snapshot e gravação MP4 com carimbo, hash SHA-256 e cadeia de custódia |
+| **Privacidade LGPD** | Máscaras de privacidade por câmera, aplicadas ao vivo e nas gravações |
+| **Relatórios PDF** | Relatório paginado de eventos por período, com autoria e totais |
+| **Controle de acesso** | Perfis admin/operador/visualizador (PBKDF2) + trilha de auditoria |
+| **Dados criptografados** | Configurações e usuários com AES-GCM (chave no Keychain) |
+| **Conexão resiliente** | Reconexão automática com backoff + watchdog de travamento |
 
-Só o mural da categoria/página **visível** roda threads de captura — o custo
-de CPU não cresce com o total de câmeras cadastradas, só com o layout ativo.
+Login padrão no primeiro uso: **admin / admin** (troque em produção).
+Todos os dados ficam em `~/Documents/VigiaCam`.
 
-O modelo YOLOv8n ("nano") roda em CPU (ou GPU Apple Silicon via MPS / CUDA,
-quando disponíveis) e baixa os pesos (~6 MB) automaticamente no primeiro uso.
+## Como compilar e rodar
 
-## ⚠️ Uso responsável
-
-Use apenas com streams que você tem autorização para acessar:
-- Câmeras oficiais de trânsito (HLS/`.m3u8` publicados por órgãos públicos —
-  as incluídas em `cameras.json` são feeds públicos do Seattle DOT)
-- Streams de teste públicos
-- Suas próprias câmeras IP
-
-Acessar câmeras de terceiros sem autorização é invasão de privacidade e pode
-configurar crime (LGPD + art. 154-A do Código Penal).
-
-## Como rodar
+Requer **macOS 14+** e a toolchain do Swift (Xcode ou Command Line Tools).
 
 ```bash
-./run.sh
+./build.sh      # compila (swift build -c release), monta VigiaCam.app e abre
 ```
 
 Ou manualmente:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python cameras_app/app.py
+cd VigiaCam
+swift build -c release
+swift run
 ```
 
-### Opções de linha de comando
+## Arquitetura
 
-```bash
-python cameras_app/app.py --help
-python cameras_app/app.py --sem-ia                # inicia sem detecção de IA
-python cameras_app/app.py --config outro.json      # config alternativo
-python cameras_app/app.py --cameras outras.json    # lista de câmeras alternativa
+```
+VigiaCam/Sources/VigiaCam/
+├── App/                    # entrada + navegação (ContentView)
+├── Core/
+│   ├── Security/           # RBAC (PBKDF2) + CryptoService (AES-GCM)
+│   └── Storage/            # arquivos, eventos CSV, auditoria, cadeia de custódia
+├── Features/
+│   ├── Live/               # videowall (layouts, ronda, tela cheia)
+│   ├── Detection/          # YOLOv8n (Vision/CoreML, parsing + NMS)
+│   ├── Alarms/             # motor de regras + painel
+│   ├── Recording/          # snapshot + gravação de clipes
+│   ├── Privacy/            # zonas de privacidade (LGPD)
+│   ├── Reports/            # relatórios PDF
+│   ├── Cameras/            # captura HLS/RTSP, cards, viewer
+│   ├── Events/ Dashboard/ Config/ Auth/
+└── UI/                     # tema e componentes
 ```
 
-Também é possível apontar arquivos alternativos via variáveis de ambiente
-`VIGIACAM_CONFIG` e `VIGIACAM_CAMERAS`.
+## ⚠️ Uso responsável
 
-### Empacotar como app do macOS
-
-```bash
-./build_app.sh
-```
-
-Gera `build/VigiaCam.app` e instala um atalho na Área de Trabalho.
-
-## Uso
-
-1. Abra a aba **Ao Vivo** e escolha a categoria (sub-aba)
-2. Clique num card para ampliar o vídeo
-3. Use a aba **Câmeras** para adicionar/remover URLs (RTSP ou `.m3u8`)
-
-As câmeras ficam salvas em `cameras_app/cameras.json`.
-
-### Como descobrir o `.m3u8` de uma câmera de trânsito
-Abra o portal (ex.: transitoaovivo.com) → F12 → aba **Network** →
-filtre por `m3u8` → recarregue → copie a URL.
-
-## Desenvolvimento
-
-```bash
-pip install -r requirements-dev.txt
-pytest          # testes
-ruff check .    # lint
-```
-
-Veja [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo de contribuição.
-
-## Requisitos
-- Python 3.9+
-- `opencv-python`, `PySide6`, `ultralytics`
-- Em alguns sistemas o RTSP exige ffmpeg instalado (`brew install ffmpeg`).
+Use apenas com streams que você tem autorização para acessar (câmeras próprias,
+feeds públicos oficiais ou streams de teste). Acessar câmeras de terceiros sem
+autorização é invasão de privacidade e pode configurar crime (LGPD + art. 154-A
+do Código Penal).
 
 ## Licença
 
-[MIT](LICENSE)
+MIT — © Dheiver Santos

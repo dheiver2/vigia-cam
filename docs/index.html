@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIGIA·CAM — Videomonitoramento Inteligente</title>
+<meta name="description" content="Plataforma VMS desktop para macOS: videowall ao vivo, detecção de objetos por IA, alarmes inteligentes, evidências com cadeia de custódia, privacidade LGPD e relatórios.">
+<style>
+  :root{
+    --bg:#0a0b0e; --panel:#121419; --card:#171a21; --border:#23262f;
+    --text:#f2f4f8; --muted:#aab1c0; --accent:#ff5a1f; --accent2:#22d3ee;
+    --ok:#34d399; --danger:#f87171; --warning:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);
+    font-family:-apple-system,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent2);text-decoration:none}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  header{border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:10}
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;max-width:1040px;margin:0 auto}
+  .logo{font-size:22px;font-weight:800;letter-spacing:.5px}
+  .logo span{color:var(--accent)}
+  .nav .links a{margin-left:18px;color:var(--muted);font-size:14px;font-weight:600}
+  .nav .links a:hover{color:var(--text)}
+  .hero{text-align:center;padding:64px 0 32px}
+  .badge-tier{display:inline-block;font-size:12px;font-weight:700;color:var(--accent);
+    border:1px solid var(--accent);border-radius:20px;padding:4px 14px;margin-bottom:20px}
+  h1{font-size:44px;font-weight:800;letter-spacing:-.5px;line-height:1.1}
+  h1 span{color:var(--accent)}
+  .lead{color:var(--muted);font-size:18px;max-width:760px;margin:20px auto 0}
+  .cta{margin-top:28px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-block;padding:12px 22px;border-radius:10px;font-weight:700;font-size:15px}
+  .btn.primary{background:var(--accent);color:#0a0b0e}
+  .btn.ghost{border:1px solid var(--border);color:var(--text)}
+  .shot{margin:40px auto 0;max-width:1000px;border:1px solid var(--border);border-radius:14px;
+    overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .shot img{display:block;width:100%;height:auto}
+  .cap{color:var(--muted);font-size:13px;text-align:center;margin-top:12px}
+  section{padding:56px 0}
+  h2{font-size:28px;font-weight:800;text-align:center}
+  .sub{color:var(--muted);text-align:center;margin:10px auto 36px;max-width:620px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .feat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .feat .ic{font-size:24px}
+  .feat h3{font-size:16px;margin:12px 0 6px}
+  .feat p{color:var(--muted);font-size:14px}
+  .feat .tag{display:inline-block;font-size:11px;font-weight:700;color:var(--accent2);
+    background:rgba(34,211,238,.12);border-radius:6px;padding:2px 8px;margin-top:12px}
+  .stack{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:10px}
+  .chip{background:var(--card);border:1px solid var(--border);border-radius:20px;
+    padding:8px 16px;font-size:13px;color:var(--muted)}
+  .chip b{color:var(--text)}
+  footer{border-top:1px solid var(--border);color:var(--muted);font-size:13px;
+    text-align:center;padding:28px 0}
+  .warn{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+    border-radius:12px;padding:16px 20px;color:var(--warning);font-size:14px;margin-top:24px}
+  @media(max-width:600px){h1{font-size:32px}.lead{font-size:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="nav">
+    <div class="logo">VIGIA<span>·CAM</span></div>
+    <div class="links">
+      <a href="#recursos">Recursos</a>
+      <a href="#stack">Tecnologia</a>
+      <a href="https://github.com/dheiver2/vigia-cam">GitHub</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="badge-tier">VMS · Video Management System</div>
+    <h1>Videomonitoramento <span>inteligente</span><br>com IA 100% local</h1>
+    <p class="lead">
+      Plataforma desktop nativa para macOS que monitora múltiplas câmeras RTSP/HLS
+      ao vivo em videowall, com detecção de pessoas e veículos por IA em tempo real
+      (YOLOv8n no Neural Engine) e alarmes inteligentes por regras configuráveis.
+      Captura de evidências com cadeia de custódia SHA-256, máscaras de privacidade
+      LGPD, relatórios em PDF e controle de acesso por perfis — pensado para editais
+      de CFTV e segurança pública.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/dheiver2/vigia-cam">Ver no GitHub</a>
+      <a class="btn ghost" href="#recursos">Conhecer recursos</a>
+    </div>
+  </div>
+
+  <div class="shot">
+    <img src="demo.gif" alt="VIGIA·CAM em funcionamento: videowall com detecção de objetos e alarme">
+  </div>
+  <p class="cap">Videowall ao vivo com detecção por IA, alarme de aglomeração e indicadores de gravação — saída real do modelo YOLOv8n.</p>
+</div>
+
+<section id="recursos">
+  <div class="wrap">
+    <h2>Recursos de nível corporativo</h2>
+    <p class="sub">Paridade com os principais VMS do mercado (Milestone, Digifort, Intelbras, Genetec), rodando 100% offline.</p>
+    <div class="grid">
+      <div class="feat"><div class="ic">🧱</div><h3>Videowall & Ronda</h3>
+        <p>Mosaicos 1×1 a 4×4, paginação por categoria, rodízio automático de câmeras (ronda) e tela cheia.</p>
+        <span class="tag">Ao Vivo</span></div>
+      <div class="feat"><div class="ic">🧠</div><h3>Detecção por IA</h3>
+        <p>YOLOv8n via Vision/CoreML no Neural Engine, identificando pessoas, veículos e mais de 80 classes em tempo real.</p>
+        <span class="tag">On-device</span></div>
+      <div class="feat"><div class="ic">🚨</div><h3>Alarmes inteligentes</h3>
+        <p>Regras por classe, limite e câmera (intrusão, aglomeração, congestionamento) com banner ao vivo, som e log.</p>
+        <span class="tag">Analíticos</span></div>
+      <div class="feat"><div class="ic">🎥</div><h3>Evidência forense</h3>
+        <p>Snapshot e gravação de clipes com carimbo de data/hora, hash SHA-256 e cadeia de custódia para validade probatória.</p>
+        <span class="tag">Cadeia de custódia</span></div>
+      <div class="feat"><div class="ic">🛡️</div><h3>Privacidade LGPD</h3>
+        <p>Máscaras de privacidade por câmera que tampam áreas sensíveis ao vivo, nas gravações e nos snapshots.</p>
+        <span class="tag">LGPD</span></div>
+      <div class="feat"><div class="ic">📄</div><h3>Relatórios PDF</h3>
+        <p>Relatórios paginados de eventos por período, com autoria e totais — prontos para instrução de processos.</p>
+        <span class="tag">Exportação</span></div>
+      <div class="feat"><div class="ic">👥</div><h3>Controle de acesso</h3>
+        <p>Perfis admin/operador/visualizador com senha PBKDF2 e trilha de auditoria de todas as ações.</p>
+        <span class="tag">RBAC</span></div>
+      <div class="feat"><div class="ic">🔒</div><h3>Dados criptografados</h3>
+        <p>Configurações e usuários protegidos com AES-GCM (chave no Keychain). Tudo armazenado localmente.</p>
+        <span class="tag">AES-GCM</span></div>
+      <div class="feat"><div class="ic">📡</div><h3>Conexão resiliente</h3>
+        <p>Reconexão automática com backoff e watchdog de travamento — as câmeras voltam sozinhas quando o sinal retorna.</p>
+        <span class="tag">Alta disponibilidade</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="stack" style="background:var(--panel)">
+  <div class="wrap">
+    <h2>Tecnologia</h2>
+    <p class="sub">Nativo, leve e sem dependência de nuvem.</p>
+    <div class="stack">
+      <div class="chip"><b>Swift</b> + SwiftUI</div>
+      <div class="chip"><b>Vision</b> / CoreML</div>
+      <div class="chip"><b>YOLOv8n</b> · Neural Engine</div>
+      <div class="chip"><b>AVFoundation</b> · RTSP/HLS</div>
+      <div class="chip"><b>CryptoKit</b> · AES-GCM</div>
+      <div class="chip">macOS 14+</div>
+    </div>
+    <div class="warn">
+      ⚖️ Uso responsável: opere apenas com câmeras que você tem autorização para acessar.
+      Acessar streams de terceiros sem autorização pode configurar crime (LGPD + art. 154-A do Código Penal).
+    </div>
+  </div>
+</section>
+
+<footer>
+  VIGIA·CAM — desenvolvido por <a href="https://github.com/dheiver2">Dheiver Santos</a> · Licença MIT ·
+  <a href="https://github.com/dheiver2/vigia-cam">github.com/dheiver2/vigia-cam</a>
+</footer>
+</body>
+</html>
