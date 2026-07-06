@@ -2,12 +2,16 @@
 __pycache__/
 *.pyc
 *.pt
-build/VigiaCam.app/
-build/run.log
-build/icon.iconset/
+build/
 .DS_Store
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
 dist/
 cameras_app/config.json
+
+# Swift
+VigiaCam/.build/
+VigiaCam/.swiftpm/
+*.xcuserstate
+DerivedData/
