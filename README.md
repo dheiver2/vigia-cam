@@ -47,6 +47,19 @@ swift build -c release
 swift run
 ```
 
+## Testes
+
+```bash
+cd VigiaCam
+./run_tests.sh    # testes de lógica pura — rodam SEM Xcode (Command Line Tools)
+swift test        # suíte XCTest completa — requer Xcode
+```
+
+`run_tests.sh` compila os fontes reais (Camera, AppConfig, AlarmRule) com um
+runner de asserções e cobre normalização de câmeras, validação/clamp de
+configuração e casamento de regras de alarme. A suíte XCTest adiciona
+CryptoService (AES-GCM), RBAC e StorageService.
+
 ## Arquitetura
 
 ```

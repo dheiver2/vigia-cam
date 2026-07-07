@@ -104,6 +104,26 @@ final class VigiaCamTests: XCTestCase {
         XCTAssertNil(Camera.normalize(dict))
     }
 
+    // MARK: - Alarm Tests
+
+    func testAlarmScopeNilMatchesAny() {
+        let r = AlarmRule(nome: "R", classe: "person", limite: 5, escopo: nil, severidade: .aviso)
+        XCTAssertTrue(r.casaCamera(nome: "Qualquer", categoria: "X"))
+    }
+
+    func testAlarmScopeMatchesByCategoryAndName() {
+        let r = AlarmRule(nome: "R", classe: "car", limite: 3, escopo: "Pátio", severidade: .info)
+        XCTAssertTrue(r.casaCamera(nome: "Z", categoria: "Pátio"))   // por categoria
+        XCTAssertTrue(r.casaCamera(nome: "Pátio", categoria: "Outra")) // por nome
+        XCTAssertFalse(r.casaCamera(nome: "Z", categoria: "Outra"))    // fora do alvo
+    }
+
+    func testAlarmExamplesAndSeverity() {
+        XCTAssertEqual(AlarmRule.exemplos.count, 3)
+        XCTAssertEqual(Severidade.allCases.count, 3)
+        XCTAssertEqual(Severidade.critico.label, "Crítico")
+    }
+
     // MARK: - StorageService Tests
 
     func testStorageDirectoriesCreated() {

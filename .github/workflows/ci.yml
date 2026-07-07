@@ -18,3 +18,12 @@ jobs:
       - name: Compilar (release)
         working-directory: VigiaCam
         run: swift build -c release
+
+      - name: Testes de lógica pura (sem Xcode)
+        working-directory: VigiaCam
+        run: ./run_tests.sh
+
+      - name: Suíte XCTest (Crypto/RBAC/Storage/Camera/Alarmes)
+        working-directory: VigiaCam
+        continue-on-error: true   # best-effort: pode falhar em runner sem Keychain
+        run: swift test
