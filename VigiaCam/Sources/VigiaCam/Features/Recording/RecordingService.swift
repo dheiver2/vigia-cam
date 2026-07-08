@@ -74,7 +74,8 @@ final class RecordingService: ObservableObject {
     /// Alimenta o writer com o frame atual (chamado pelo card enquanto grava).
     func alimentar(_ camera: String, image: NSImage) {
         fila.async { [weak self] in
-            self?.writers[camera]?.acrescentar(self!.comCarimbo(image, camera: camera))
+            guard let self, let w = self.writers[camera] else { return }
+            w.acrescentar(self.comCarimbo(image, camera: camera))
         }
     }
 

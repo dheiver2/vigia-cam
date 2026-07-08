@@ -21,8 +21,9 @@ struct CameraCardView: View {
     private var gravando: Bool { rec.estaGravando(camera.nome) }
 
     var body: some View {
-        Button(action: { showingDetail = true }) {
-            VStack(alignment: .leading, spacing: 0) {
+        // VStack + onTapGesture (não Button) para os botões internos (snapshot/
+        // gravar) capturarem o próprio clique sem também abrir o detalhe.
+        VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .topTrailing) {
                     Group {
                         if let img = vm.frameImage {
@@ -133,8 +134,8 @@ struct CameraCardView: View {
             .clipShape(RoundedRectangle(cornerRadius: compacto ? 6 : 12))
             .overlay(RoundedRectangle(cornerRadius: compacto ? 6 : 12).stroke(isHovered ? VigiaTheme.accent : VigiaTheme.border, lineWidth: isHovered ? 1.5 : 1))
             .shadow(color: isHovered ? VigiaTheme.accentGlow : .clear, radius: 8)
-        }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onTapGesture { showingDetail = true }
         .onHover { hovering in withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering } }
         .onAppear { vm.start() }
         .onDisappear { vm.stop() }

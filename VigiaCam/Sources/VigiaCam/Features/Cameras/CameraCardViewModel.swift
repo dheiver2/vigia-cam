@@ -73,6 +73,11 @@ class CameraCardViewModel: ObservableObject {
     func stop() {
         detectTimer?.invalidate()
         detectTimer = nil
+        // finaliza gravação órfã (ex.: trocou de página do videowall gravando),
+        // senão o MP4 fica sem trailer (corrompido) e o indicador REC trava.
+        if RecordingService.shared.estaGravando(camera.nome) {
+            RecordingService.shared.pararGravacao(camera.nome)
+        }
         cameraService.stopCamera()
     }
 
