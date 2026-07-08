@@ -14,6 +14,10 @@ final class AlarmService: ObservableObject {
     @Published var recentes: [AlarmEvent] = []      // histórico da sessão (cap 200)
     @Published var banner: AlarmEvent?              // alarme em destaque (auto-some)
     @Published var somAtivo = true
+    @Published var autoSnapshot = true              // captura evidência ao disparar
+    @Published var webhookURL = ""                  // POST JSON em cada alarme (opcional)
+    /// Classes monitoradas (vazio = todas). Ex.: só ["person","car"].
+    @Published var classesMonitoradas: Set<String> = []
 
     private let storage = StorageService.shared
     private weak var eventService: EventService?
@@ -24,6 +28,10 @@ final class AlarmService: ObservableObject {
 
     private init() { regras = carregar() }
 
+    func monitora(_ classe: String) -> Bool {
+        classesMonitoradas.isEmpty || classesMonitoradas.contains(classe)
+    }
+
     func configure(eventService: EventService, cameras: [Camera]) {
         self.eventService = eventService
         for c in cameras { categoriaPorCamera[c.nome] = c.categoria }
@@ -31,22 +39,29 @@ final class AlarmService: ObservableObject {
 
     // MARK: - Avaliação (chamada a cada detecção)
 
-    func avaliar(camera: String, counts: [String: Int]) {
+    /// Avalia as regras e retorna os alarmes disparados (o chamador usa isso para,
+    /// por exemplo, capturar um snapshot de evidência com o frame atual).
+    @discardableResult
+    func avaliar(camera: String, counts: [String: Int]) -> [AlarmEvent] {
         let categoria = categoriaPorCamera[camera] ?? ""
         let agora = Date()
+        var disparados: [AlarmEvent] = []
         for regra in regras where regra.ativo && regra.casaCamera(nome: camera, categoria: categoria) {
+            if regra.classe != "qualquer" && !monitora(regra.classe) { continue }
             let valor = regra.classe == "qualquer"
-                ? counts.values.reduce(0, +)
+                ? counts.filter { monitora($0.key) }.values.reduce(0, +)
                 : (counts[regra.classe] ?? 0)
             guard valor >= regra.limite else { continue }
             let chave = "\(regra.id)|\(camera)"
             if let ult = ultimoDisparo[chave], agora.timeIntervalSince(ult) < debounce { continue }
             ultimoDisparo[chave] = agora
-            disparar(regra: regra, camera: camera, valor: valor)
+            disparados.append(disparar(regra: regra, camera: camera, valor: valor))
         }
+        return disparados
     }
 
-    private func disparar(regra: AlarmRule, camera: String, valor: Int) {
+    @discardableResult
+    private func disparar(regra: AlarmRule, camera: String, valor: Int) -> AlarmEvent {
         let alvo = regra.classe == "qualquer" ? "objetos" : regra.classe
         let msg = "\(regra.nome) — \(valor) \(alvo) em \(camera)"
         let ev = AlarmEvent(quando: Date(), regra: regra.nome, camera: camera,
@@ -63,6 +78,22 @@ final class AlarmService: ObservableObject {
         }
         eventService?.registrar(tipo: "ALARME/\(regra.severidade.rawValue)", camera: camera, detalhe: msg)
         storage.auditar("alarme", detalhe: msg)
+        enviarWebhook(ev)
+        return ev
+    }
+
+    /// Notificação de integração: POST JSON para um endpoint externo (SIEM,
+    /// central de monitoramento, automação). Falha silenciosa, nunca bloqueia.
+    private func enviarWebhook(_ ev: AlarmEvent) {
+        let s = webhookURL.trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: s), s.hasPrefix("http") else { return }
+        var req = URLRequest(url: url); req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["evento": "alarme", "regra": ev.regra, "camera": ev.camera,
+                                   "severidade": ev.severidade.rawValue, "mensagem": ev.mensagem,
+                                   "quando": ISO8601DateFormatter().string(from: ev.quando)]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: req).resume()
     }
 
     // MARK: - CRUD de regras (persistido em regras_alarme.json)

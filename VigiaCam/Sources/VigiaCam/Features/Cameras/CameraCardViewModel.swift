@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import QuartzCore
 
 class CameraCardViewModel: ObservableObject {
     @Published var frameImage: NSImage?
@@ -8,11 +9,16 @@ class CameraCardViewModel: ObservableObject {
     @Published var isOnline = false
     @Published var detectionCount: [String: Int] = [:]
     @Published var lastDetections: [Detection] = []
+    @Published var tracked: [TrackedObject] = []      // caixas rastreadas/preditas
+    @Published var unicos: [String: Int] = [:]        // contagem de objetos únicos
+    @Published var reconexoes = 0                      // saúde do stream
 
     let camera: Camera
     private let cameraService = CameraService()
     private let detector = DetectorService()
+    private let tracker = ObjectTracker()
     private var detectTimer: Timer?
+    private var displayTimer: Timer?                  // extrapola caixas a ~15 Hz
     private var frameCount = 0
     private var isDetecting = false
     private var bag = Set<AnyCancellable>()
@@ -24,13 +30,27 @@ class CameraCardViewModel: ObservableObject {
         cameraService.$isRunning.assign(to: &$isOnline)
         detector.$detectionCount.assign(to: &$detectionCount)
         detector.$lastDetections.assign(to: &$lastDetections)
+        cameraService.$totalReconexoes.assign(to: &$reconexoes)
 
-        // detecção -> motor de alarmes
+        // detecção -> motor de alarmes (+ auto-snapshot de evidência ao disparar)
         detector.$detectionCount
             .receive(on: DispatchQueue.main)
             .sink { [weak self] counts in
                 guard let self, !counts.isEmpty else { return }
-                AlarmService.shared.avaliar(camera: self.camera.nome, counts: counts)
+                let disparados = AlarmService.shared.avaliar(camera: self.camera.nome, counts: counts)
+                if !disparados.isEmpty && AlarmService.shared.autoSnapshot {
+                    self.capturarSnapshot()   // congela a cena que gerou o alarme
+                }
+            }
+            .store(in: &bag)
+
+        // detecção -> rastreador (associa/atualiza tracks a cada inferência)
+        detector.$lastDetections
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] dets in
+                guard let self else { return }
+                self.tracker.update(dets, now: CACurrentMediaTime())
+                self.unicos = self.tracker.unicosPorClasse
             }
             .store(in: &bag)
 
@@ -68,17 +88,29 @@ class CameraCardViewModel: ObservableObject {
             cameraService.startLocalCamera()
         }
         startDetection()
+        startDisplayLoop()
     }
 
     func stop() {
-        detectTimer?.invalidate()
-        detectTimer = nil
+        detectTimer?.invalidate(); detectTimer = nil
+        displayTimer?.invalidate(); displayTimer = nil
         // finaliza gravação órfã (ex.: trocou de página do videowall gravando),
         // senão o MP4 fica sem trailer (corrompido) e o indicador REC trava.
         if RecordingService.shared.estaGravando(camera.nome) {
             RecordingService.shared.pararGravacao(camera.nome)
         }
         cameraService.stopCamera()
+    }
+
+    /// Extrapola as caixas rastreadas a ~15 Hz (independente da taxa de inferência),
+    /// fazendo os rótulos acompanharem o objeto em tempo real — sem o delay/salto.
+    private func startDisplayLoop() {
+        displayTimer?.invalidate()
+        displayTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.tracked = self.tracker.predicted(at: CACurrentMediaTime())
+        }
+        RunLoop.main.add(displayTimer!, forMode: .common)   // .common: não pausa no scroll
     }
 
     private func startDetection() {

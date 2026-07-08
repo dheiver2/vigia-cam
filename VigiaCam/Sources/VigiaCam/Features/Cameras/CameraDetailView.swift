@@ -8,6 +8,11 @@ struct CameraDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var editandoPrivacidade = false
     @State private var arrasto: CGRect?
+    // PTZ digital
+    @State private var ptzZoom: CGFloat = 1
+    @State private var ptzBase: CGFloat = 1
+    @State private var ptzPan: CGSize = .zero
+    @State private var ptzPanBase: CGSize = .zero
 
     init(camera: Camera) {
         self.camera = camera
@@ -39,7 +44,7 @@ struct CameraDetailView: View {
                         Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .overlay(
-                                DetectionOverlay(detections: vm.lastDetections,
+                                DetectionOverlay(objetos: vm.tracked,
                                                  imageSize: img.size,
                                                  contentMode: .fit),
                                 alignment: .center
@@ -48,6 +53,13 @@ struct CameraDetailView: View {
                                 PrivacyMaskOverlay(cameraURL: camera.url,
                                                    imageSize: img.size, contentMode: .fit))
                             .overlay(editorPrivacidade(imageSize: img.size))
+                            // PTZ digital: zoom (scroll/±) + pan (arraste) quando ampliado
+                            .scaleEffect(ptzZoom)
+                            .offset(ptzPan)
+                            // desabilita PTZ enquanto edita zona de privacidade
+                            .gesture(ptzGesture, including: editandoPrivacidade ? .subviews : .all)
+                            .clipped()
+                            .overlay(alignment: .bottomLeading) { if ptzZoom > 1.01 { ptzControles } }
                     } else {
                         VStack(spacing: 12) {
                             ProgressView().tint(VigiaTheme.accent)
@@ -98,14 +110,36 @@ struct CameraDetailView: View {
                     }
                 }
 
+                // Analítico: contagem de objetos ÚNICOS (footfall / veicular) rastreados
+                if !vm.unicos.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.2.wave.2").foregroundColor(VigiaTheme.accent2)
+                        Text("Únicos rastreados:").font(.system(size: 11, weight: .semibold)).foregroundColor(VigiaTheme.muted)
+                        ForEach(Array(vm.unicos.sorted(by: { $0.key < $1.key })), id: \.key) { label, n in
+                            Text("\(label): \(n)").font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(DetectorService.color(for: label).opacity(0.25))
+                                .clipShape(Capsule())
+                        }
+                        Spacer()
+                    }.padding(.horizontal, 12).padding(.vertical, 6).background(VigiaTheme.card)
+                }
+
                 HStack {
                     Label(camera.tipo.label, systemImage: "antenna.radiowaves.left.and.right").font(.system(size: 12, weight: .medium))
                     Spacer()
                     Label(camera.categoria, systemImage: "folder").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    // saúde do stream
+                    Label("\(vm.reconexoes) reconexão\(vm.reconexoes == 1 ? "" : "ões")",
+                          systemImage: vm.reconexoes == 0 ? "checkmark.seal" : "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(vm.reconexoes == 0 ? VigiaTheme.ok : VigiaTheme.warning)
                     let total = vm.detectionCount.values.reduce(0, +)
                     if total > 0 {
                         Spacer()
-                        Label("\(total) detectado\(total == 1 ? "" : "s")", systemImage: "viewfinder.rectangular")
+                        Label("\(total) no quadro", systemImage: "viewfinder.rectangular")
                             .font(.system(size: 12, weight: .medium))
                     }
                 }.foregroundColor(VigiaTheme.muted).padding(12).background(VigiaTheme.panel)
@@ -113,6 +147,39 @@ struct CameraDetailView: View {
         }
         .onAppear { vm.start() }
         .onDisappear { vm.stop() }
+    }
+
+    // PTZ digital: pinça p/ zoom + arraste p/ pan (combinados).
+    private var ptzGesture: some Gesture {
+        SimultaneousGesture(
+            MagnificationGesture()
+                .onChanged { v in ptzZoom = min(max(1, ptzBase * v), 6) }
+                .onEnded { _ in ptzBase = ptzZoom; if ptzZoom <= 1.01 { ptzPan = .zero; ptzPanBase = .zero } },
+            DragGesture()
+                .onChanged { v in
+                    guard ptzZoom > 1.01 else { return }
+                    ptzPan = CGSize(width: ptzPanBase.width + v.translation.width,
+                                    height: ptzPanBase.height + v.translation.height)
+                }
+                .onEnded { _ in ptzPanBase = ptzPan }
+        )
+    }
+
+    private var ptzControles: some View {
+        HStack(spacing: 6) {
+            Button { ajustarZoom(-0.5) } label: { Image(systemName: "minus.magnifyingglass") }
+            Text(String(format: "%.1f×", ptzZoom)).font(.system(size: 11, weight: .bold, design: .monospaced))
+            Button { ajustarZoom(0.5) } label: { Image(systemName: "plus.magnifyingglass") }
+            Button { ptzZoom = 1; ptzBase = 1; ptzPan = .zero; ptzPanBase = .zero } label: { Image(systemName: "arrow.counterclockwise") }
+        }
+        .buttonStyle(.plain).foregroundColor(.white)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(Color.black.opacity(0.6)).clipShape(Capsule())
+        .padding(12)
+    }
+    private func ajustarZoom(_ d: CGFloat) {
+        ptzZoom = min(max(1, ptzZoom + d), 6); ptzBase = ptzZoom
+        if ptzZoom <= 1.01 { ptzPan = .zero; ptzPanBase = .zero }
     }
 
     private func acao(_ icon: String, _ titulo: String, _ cor: Color, _ f: @escaping () -> Void) -> some View {

@@ -12,6 +12,13 @@ struct LiveWallView: View {
     @State private var ronda = false
     @State private var rondaSeg = 10
     @State private var buscando = ""
+    @State private var osd = true                 // legenda sempre visível (nome+hora)
+    @State private var salvos: [VistaSalva] = []
+
+    struct VistaSalva: Codable, Identifiable, Hashable {
+        var id = UUID().uuidString
+        var nome: String; var categoria: String; var layout: Int
+    }
 
     private let layouts = [(1, "1×1"), (4, "2×2"), (9, "3×3"), (16, "4×4")]
     private let rondaTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -41,9 +48,45 @@ struct LiveWallView: View {
             .background(Color.black)
         }
         .background(VigiaTheme.bg)
-        .onAppear { cameras = storage.carregarCameras() }
+        .background(atalhosTeclado)
+        .onAppear { cameras = storage.carregarCameras(); salvos = carregarSalvos() }
         .onReceive(rondaTimer) { _ in avancarRonda() }
     }
+
+    /// Atalhos de teclado (VMS): 1–4 mosaicos, ←→ páginas, F tela cheia, O OSD.
+    private var atalhosTeclado: some View {
+        ZStack {
+            Button("") { trocarLayout(1) }.keyboardShortcut("1", modifiers: [])
+            Button("") { trocarLayout(4) }.keyboardShortcut("2", modifiers: [])
+            Button("") { trocarLayout(9) }.keyboardShortcut("3", modifiers: [])
+            Button("") { trocarLayout(16) }.keyboardShortcut("4", modifiers: [])
+            Button("") { irPara(pagina - 1) }.keyboardShortcut(.leftArrow, modifiers: [])
+            Button("") { irPara(pagina + 1) }.keyboardShortcut(.rightArrow, modifiers: [])
+            Button("") { NSApp.keyWindow?.toggleFullScreen(nil) }.keyboardShortcut("f", modifiers: [])
+            Button("") { osd.toggle() }.keyboardShortcut("o", modifiers: [])
+            Button("") { ronda.toggle() }.keyboardShortcut(.space, modifiers: [])
+        }.opacity(0).allowsHitTesting(false)
+    }
+
+    private func carregarSalvos() -> [VistaSalva] {
+        guard let d = storage.carregarRaw("vistas_salvas.json"),
+              let v = try? JSONDecoder().decode([VistaSalva].self, from: d) else { return [] }
+        return v
+    }
+    private func salvarVista() {
+        let v = VistaSalva(nome: (categoria == "Todas" ? "Geral" : categoria) + " \(layoutNome())",
+                           categoria: categoria, layout: layout)
+        salvos.append(v)
+        if let d = try? JSONEncoder().encode(salvos) { storage.salvarRaw(d, para: "vistas_salvas.json") }
+    }
+    private func aplicarVista(_ v: VistaSalva) {
+        categoria = v.categoria; layout = v.layout; pagina = 0
+    }
+    private func removerVista(_ v: VistaSalva) {
+        salvos.removeAll { $0.id == v.id }
+        if let d = try? JSONEncoder().encode(salvos) { storage.salvarRaw(d, para: "vistas_salvas.json") }
+    }
+    private func layoutNome() -> String { layouts.first { $0.0 == layout }?.1 ?? "2×2" }
 
     // MARK: - Barra de controles
 
@@ -105,11 +148,34 @@ struct LiveWallView: View {
             }.buttonStyle(.plain)
             Stepper("", value: $rondaSeg, in: 3...60, step: 1).labelsHidden().frame(width: 20)
 
+            // OSD (legenda sempre visível)
+            Button { osd.toggle() } label: {
+                Image(systemName: osd ? "textformat.size" : "textformat.size.smaller")
+            }.buttonStyle(.plain).foregroundColor(osd ? VigiaTheme.accent : VigiaTheme.muted)
+                .help("Legenda sobreposta (OSD) — tecla O")
+
+            // vistas salvas
+            Menu {
+                Button("Salvar vista atual", action: salvarVista)
+                if !salvos.isEmpty { Divider() }
+                ForEach(salvos) { v in
+                    Button("\(v.nome)") { aplicarVista(v) }
+                }
+                if !salvos.isEmpty {
+                    Divider()
+                    ForEach(salvos) { v in
+                        Button("Remover: \(v.nome)", role: .destructive) { removerVista(v) }
+                    }
+                }
+            } label: {
+                Image(systemName: "square.grid.2x2")
+            }.menuStyle(.borderlessButton).frame(width: 28).help("Vistas salvas")
+
             // tela cheia
             Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
             }.buttonStyle(.plain).foregroundColor(VigiaTheme.text)
-                .help("Tela cheia")
+                .help("Tela cheia — tecla F")
 
             Text("\(filtradas.count) câmeras").font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
         }
@@ -132,7 +198,7 @@ struct LiveWallView: View {
                     ForEach(0..<cols, id: \.self) { c in
                         let idx = r * cols + c
                         if idx < cams.count {
-                            CameraCardView(camera: cams[idx], videoHeight: nil, compacto: true)
+                            CameraCardView(camera: cams[idx], videoHeight: nil, compacto: true, osd: osd)
                                 .frame(width: cellW, height: cellH)
                                 .id("\(cams[idx].url)#\(pagina)#\(layout)")
                         } else {

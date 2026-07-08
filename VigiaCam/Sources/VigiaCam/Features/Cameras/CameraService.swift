@@ -7,6 +7,7 @@ final class CameraService: NSObject, ObservableObject {
     @Published var isRunning = false
     @Published var currentFrame: NSImage?
     @Published var fps: Double = 0
+    @Published var totalReconexoes = 0     // saúde: quantas vezes o stream caiu
 
     private var captureSession: AVCaptureSession?
     private var sessionQueue = DispatchQueue(label: "camera.session")
@@ -124,7 +125,7 @@ final class CameraService: NSObject, ObservableObject {
     private func agendarReconexao() {
         guard !isStopped else { return }
         teardownStream()
-        DispatchQueue.main.async { self.isRunning = false; self.fps = 0 }
+        DispatchQueue.main.async { self.isRunning = false; self.fps = 0; self.totalReconexoes += 1 }
         // backoff progressivo: 2, 4, 8… até 30s, p/ não martelar o servidor.
         let atraso = min(2.0 * pow(2.0, Double(min(reconnectAttempts, 4))), 30.0)
         reconnectAttempts += 1

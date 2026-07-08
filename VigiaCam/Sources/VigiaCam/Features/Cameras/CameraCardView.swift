@@ -5,20 +5,23 @@ struct CameraCardView: View {
     /// nil = altura fixa (lista); >0 preenche a célula (videowall).
     var videoHeight: CGFloat? = 140
     var compacto: Bool = false
+    var osd: Bool = false                 // legenda sobreposta (nome + hora)
     @StateObject private var vm: CameraCardViewModel
     @ObservedObject private var rec = RecordingService.shared
     @State private var isHovered = false
     @State private var showingDetail = false
     @State private var flashSnapshot = false
 
-    init(camera: Camera, videoHeight: CGFloat? = 140, compacto: Bool = false) {
+    init(camera: Camera, videoHeight: CGFloat? = 140, compacto: Bool = false, osd: Bool = false) {
         self.camera = camera
         self.videoHeight = videoHeight
         self.compacto = compacto
+        self.osd = osd
         _vm = StateObject(wrappedValue: CameraCardViewModel(camera: camera))
     }
 
     private var gravando: Bool { rec.estaGravando(camera.nome) }
+    static let horaFmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "dd/MM HH:mm:ss"; return f }()
 
     var body: some View {
         // VStack + onTapGesture (não Button) para os botões internos (snapshot/
@@ -35,9 +38,10 @@ struct CameraCardView: View {
                                 .frame(maxHeight: videoHeight == nil ? .infinity : nil)
                                 .clipped()
                                 .overlay(
-                                    DetectionOverlay(detections: vm.lastDetections,
+                                    DetectionOverlay(objetos: vm.tracked,
                                                      imageSize: img.size,
-                                                     contentMode: .fill)
+                                                     contentMode: .fill,
+                                                     mostrarID: !compacto)
                                 )
                                 .overlay(
                                     PrivacyMaskOverlay(cameraURL: camera.url,
@@ -76,6 +80,13 @@ struct CameraCardView: View {
                         if vm.isOnline { LiveBadge() } else { OfflineBadge() }
                         if gravando { RecBadge() }
                         Spacer()
+                        if osd {
+                            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                                Text(Self.horaFmt.string(from: ctx.date))
+                                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(.white).shadow(color: .black, radius: 2)
+                            }
+                        }
                         FPSCaption(fps: vm.fps)
                     }.padding(8)
 
@@ -201,31 +212,34 @@ func fittedRect(container: CGSize, image: CGSize, mode: ContentMode) -> CGRect {
 }
 
 struct DetectionOverlay: View {
-    let detections: [Detection]
-    /// Tamanho em pixels do frame de origem — necessário para casar as caixas
-    /// com a imagem exibida (que é escalada/cortada por aspecto).
+    /// Objetos rastreados (box já predito/suavizado, com ID persistente).
+    let objetos: [TrackedObject]
     var imageSize: CGSize = .zero
     /// Deve espelhar o `contentMode` da Image (.fill corta, .fit deixa barras).
     var contentMode: ContentMode = .fill
+    var mostrarID = true
 
     var body: some View {
         GeometryReader { geo in
             let rect = imageRect(in: geo.size)
-            ForEach(detections) { det in
-                let box = det.boundingBox
+            ForEach(objetos) { obj in
+                let box = obj.box
                 // Vision usa origem inferior-esquerda; convertemos para topo.
                 let x = rect.minX + box.origin.x * rect.width
                 let y = rect.minY + (1.0 - box.origin.y - box.size.height) * rect.height
                 let w = box.size.width * rect.width
                 let h = box.size.height * rect.height
-                let color = DetectorService.color(for: det.label)
+                let color = DetectorService.color(for: obj.label)
+                let etiqueta = mostrarID
+                    ? "\(obj.label) #\(obj.id) · \(Int(obj.confidence * 100))%"
+                    : "\(obj.label) \(Int(obj.confidence * 100))%"
 
                 RoundedRectangle(cornerRadius: 2)
                     .stroke(color, lineWidth: 2)
                     .frame(width: max(w, 8), height: max(h, 8))
                     .position(x: x + w / 2, y: y + h / 2)
                     .overlay(
-                        Text("\(det.label) \(Int(det.confidence * 100))%")
+                        Text(etiqueta)
                             .font(.system(size: 8, weight: .bold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 3).padding(.vertical, 1)
@@ -235,6 +249,8 @@ struct DetectionOverlay: View {
                             .position(x: x + w / 2, y: max(y - 6, rect.minY + 6)),
                         alignment: .top
                     )
+                    // interpola entre as atualizações do tracker -> movimento fluido
+                    .animation(.linear(duration: 1.0 / 15.0), value: box)
             }
         }
         .clipped()

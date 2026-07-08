@@ -11,6 +11,7 @@ OUT="$(mktemp -d)/vigia_tests"
 swiftc -o "$OUT" \
   "$SRC/Features/Cameras/Models/Camera.swift" \
   "$SRC/Features/Alarms/AlarmModels.swift" \
+  "$SRC/Features/Detection/ObjectTracker.swift" \
   "Tests-cli/main.swift"
 
 echo "== Executando testes =="

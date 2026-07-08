@@ -31,7 +31,16 @@ struct AlarmsView: View {
                 Spacer()
                 Toggle("Som", isOn: $alarms.somAtivo).toggleStyle(.switch).tint(VigiaTheme.accent)
                     .font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
-            }.padding(16)
+                Toggle("Auto-evidência", isOn: $alarms.autoSnapshot).toggleStyle(.switch).tint(VigiaTheme.accent)
+                    .font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
+            }.padding(.horizontal, 16).padding(.top, 16)
+
+            // Integração: webhook de notificação (SIEM / central)
+            HStack(spacing: 8) {
+                Image(systemName: "bell.badge.waveform").foregroundColor(VigiaTheme.accent2)
+                TextField("Webhook (POST JSON em cada alarme) — https://…", text: $alarms.webhookURL)
+                    .textFieldStyle(.roundedBorder).font(.system(size: 11))
+            }.padding(.horizontal, 16).padding(.bottom, 8)
 
             if alarms.recentes.isEmpty {
                 VStack(spacing: 10) {

@@ -1,4 +1,9 @@
 import Foundation
+import CoreGraphics
+
+// Stub de Detection p/ testar o ObjectTracker isolado (o real vive em
+// DetectorService.swift, que importa Vision e não compila sem Xcode).
+struct Detection: Identifiable { let id = UUID(); let label: String; let confidence: Float; let boundingBox: CGRect }
 
 // Testes de lógica pura executáveis SEM Xcode (só Command Line Tools).
 // Compilados junto com os fontes reais por ../run_tests.sh — não usam XCTest.
@@ -49,6 +54,26 @@ check(!rEsc.casaCamera(nome: "Z", categoria: "Outra"), "escopo NÃO casa fora do
 check(AlarmRule.exemplos.count == 3, "3 regras de exemplo")
 check(Severidade.critico.label == "Crítico", "label de severidade")
 check(Severidade.allCases.count == 3, "3 níveis de severidade")
+
+print("== ObjectTracker ==")
+let tk = ObjectTracker()
+var t = 100.0
+for i in 0..<5 {
+    let x = 0.1 + Double(i) * 0.15   // objeto atravessa a cena
+    tk.update([Detection(label: "car", confidence: 0.9,
+                         boundingBox: CGRect(x: x, y: 0.4, width: 0.2, height: 0.2))], now: t)
+    t += 0.4
+}
+let conf = tk.predicted(at: t)
+check(conf.count == 1, "1 track confirmado após 5 detecções")
+check(conf.first?.vx ?? 0 > 0.2, "velocidade estimada para a direita")
+let b0 = tk.predicted(at: t).first?.box.minX ?? 0
+let b1 = tk.predicted(at: t + 0.2).first?.box.minX ?? 0
+check(b1 > b0, "box extrapola para frente entre inferências (fim do delay)")
+check(tk.unicosPorClasse["car"] == 1, "1 objeto único contado")
+tk.update([Detection(label: "car", confidence: 0.8,
+                     boundingBox: CGRect(x: 0.05, y: 0.05, width: 0.1, height: 0.1))], now: t + 0.4)
+check(tk.unicosPorClasse["car"] == 2, "objeto distante vira 2º único")
 
 print("\nResultado: \(passou) passaram, \(falhou) falharam")
 exit(falhou == 0 ? 0 : 1)
