@@ -5,9 +5,15 @@ struct CameraDetailView: View {
     @StateObject private var vm: CameraCardViewModel
     @ObservedObject private var rec = RecordingService.shared
     @ObservedObject private var privacy = PrivacyService.shared
+    @ObservedObject private var analitico = AnalyticsConfigService.shared
     @Environment(\.dismiss) private var dismiss
     @State private var editandoPrivacidade = false
     @State private var arrasto: CGRect?
+    // edição de analítico de negócio
+    enum ModoAnalitico { case nenhum, linha, zona }
+    @State private var modo: ModoAnalitico = .nenhum
+    @State private var tipoZona: TipoZona = .intrusao
+    @State private var linhaArrasto: (CGPoint, CGPoint)?
     // PTZ digital
     @State private var ptzZoom: CGFloat = 1
     @State private var ptzBase: CGFloat = 1
@@ -52,12 +58,14 @@ struct CameraDetailView: View {
                             .overlay(
                                 PrivacyMaskOverlay(cameraURL: camera.url,
                                                    imageSize: img.size, contentMode: .fit))
+                            .overlay(analiticoOverlay(imageSize: img.size))
                             .overlay(editorPrivacidade(imageSize: img.size))
+                            .overlay(editorAnalitico(imageSize: img.size))
                             // PTZ digital: zoom (scroll/±) + pan (arraste) quando ampliado
                             .scaleEffect(ptzZoom)
                             .offset(ptzPan)
-                            // desabilita PTZ enquanto edita zona de privacidade
-                            .gesture(ptzGesture, including: editandoPrivacidade ? .subviews : .all)
+                            // desabilita PTZ enquanto edita zona/privacidade/linha
+                            .gesture(ptzGesture, including: (editandoPrivacidade || modo != .nenhum) ? .subviews : .all)
                             .clipped()
                             .overlay(alignment: .bottomLeading) { if ptzZoom > 1.01 { ptzControles } }
                     } else {
@@ -84,9 +92,32 @@ struct CameraDetailView: View {
                         acao("arrow.uturn.backward", "Desfazer", VigiaTheme.muted) { privacy.removerUltima(camera.url) }
                         acao("trash", "Limpar zonas", VigiaTheme.danger) { privacy.limpar(camera.url) }
                     }
+                    Divider().frame(height: 20)
+                    // analítico de negócio
+                    acao(modo == .linha ? "checkmark.circle.fill" : "arrow.left.and.right",
+                         modo == .linha ? "Concluir linha" : "Linha de contagem",
+                         modo == .linha ? VigiaTheme.ok : VigiaTheme.text) {
+                        modo = modo == .linha ? .nenhum : .linha; editandoPrivacidade = false
+                    }
+                    acao(modo == .zona ? "checkmark.circle.fill" : "square.dashed",
+                         modo == .zona ? "Concluir zona" : "Zona de análise",
+                         modo == .zona ? VigiaTheme.ok : VigiaTheme.text) {
+                        modo = modo == .zona ? .nenhum : .zona; editandoPrivacidade = false
+                    }
+                    if modo == .zona {
+                        Picker("", selection: $tipoZona) {
+                            ForEach(TipoZona.allCases) { Text($0.label).tag($0) }
+                        }.frame(width: 190).labelsHidden()
+                    }
                     Spacer()
                     if editandoPrivacidade {
                         Text("Arraste sobre o vídeo para tampar uma área")
+                            .font(.system(size: 11)).foregroundColor(VigiaTheme.warning)
+                    } else if modo == .linha {
+                        Text("Arraste do ponto A ao B para traçar a linha")
+                            .font(.system(size: 11)).foregroundColor(VigiaTheme.warning)
+                    } else if modo == .zona {
+                        Text("Arraste para marcar a zona (\(tipoZona.label))")
                             .font(.system(size: 11)).foregroundColor(VigiaTheme.warning)
                     }
                 }.padding(.horizontal, 12).padding(.vertical, 8).background(VigiaTheme.panel)
@@ -147,6 +178,83 @@ struct CameraDetailView: View {
         }
         .onAppear { vm.start() }
         .onDisappear { vm.stop() }
+    }
+
+    // MARK: - Analítico de negócio (linha + zonas)
+
+    private var corZona: [TipoZona: Color] { [.intrusao: VigiaTheme.danger, .ocupacao: VigiaTheme.accent2, .permanencia: VigiaTheme.warning] }
+
+    /// Desenha a linha de contagem e as zonas configuradas (visualização).
+    @ViewBuilder
+    private func analiticoOverlay(imageSize: CGSize) -> some View {
+        GeometryReader { geo in
+            let r = fittedRect(container: geo.size, image: imageSize, mode: .fit)
+            let cfg = analitico.config(camera.url)
+            ZStack {
+                if cfg.linhaAtiva {
+                    Path { p in
+                        p.move(to: CGPoint(x: r.minX + cfg.ax * r.width, y: r.minY + cfg.ay * r.height))
+                        p.addLine(to: CGPoint(x: r.minX + cfg.bx * r.width, y: r.minY + cfg.by * r.height))
+                    }.stroke(VigiaTheme.accent, style: StrokeStyle(lineWidth: 3, dash: [7, 4]))
+                }
+                ForEach(cfg.zonas) { z in
+                    let c = corZona[z.tipo] ?? VigiaTheme.accent2
+                    Rectangle().stroke(c, lineWidth: 2).background(Rectangle().fill(c.opacity(0.12)))
+                        .frame(width: z.w * r.width, height: z.h * r.height)
+                        .position(x: r.minX + (z.x + z.w / 2) * r.width, y: r.minY + (z.y + z.h / 2) * r.height)
+                        .overlay(Text(z.tipo.rawValue).font(.system(size: 8, weight: .bold)).foregroundColor(c)
+                            .position(x: r.minX + (z.x + z.w / 2) * r.width, y: r.minY + z.y * r.height - 6))
+                }
+            }
+        }.allowsHitTesting(false)
+    }
+
+    /// Captura o arrasto para criar a linha ou a zona.
+    @ViewBuilder
+    private func editorAnalitico(imageSize: CGSize) -> some View {
+        if modo != .nenhum {
+            GeometryReader { geo in
+                let r = fittedRect(container: geo.size, image: imageSize, mode: .fit)
+                ZStack {
+                    Color.white.opacity(0.001)
+                    if modo == .linha, let l = linhaArrasto {
+                        Path { p in p.move(to: l.0); p.addLine(to: l.1) }
+                            .stroke(VigiaTheme.accent, style: StrokeStyle(lineWidth: 3, dash: [7, 4]))
+                    }
+                    if modo == .zona, let a = arrasto {
+                        Rectangle().stroke(corZona[tipoZona] ?? .cyan, lineWidth: 2)
+                            .background(Color.warningFill)
+                            .frame(width: a.width, height: a.height).position(x: a.midX, y: a.midY)
+                    }
+                }
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 4)
+                    .onChanged { v in
+                        if modo == .linha { linhaArrasto = (v.startLocation, v.location) }
+                        else { arrasto = CGRect(x: min(v.startLocation.x, v.location.x),
+                                                y: min(v.startLocation.y, v.location.y),
+                                                width: abs(v.location.x - v.startLocation.x),
+                                                height: abs(v.location.y - v.startLocation.y)) }
+                    }
+                    .onEnded { _ in
+                        guard r.width > 0 else { arrasto = nil; linhaArrasto = nil; return }
+                        func norm(_ p: CGPoint) -> CGPoint {
+                            CGPoint(x: min(max(0, (p.x - r.minX) / r.width), 1),
+                                    y: min(max(0, (p.y - r.minY) / r.height), 1))
+                        }
+                        if modo == .linha, let l = linhaArrasto {
+                            analitico.definirLinha(camera.url, a: norm(l.0), b: norm(l.1))
+                        } else if modo == .zona, let a = arrasto, a.width > 6, a.height > 6 {
+                            let na = norm(CGPoint(x: a.minX, y: a.minY))
+                            let nb = norm(CGPoint(x: a.maxX, y: a.maxY))
+                            analitico.adicionarZona(camera.url,
+                                rect: CGRect(x: na.x, y: na.y, width: nb.x - na.x, height: nb.y - na.y),
+                                tipo: tipoZona)
+                        }
+                        arrasto = nil; linhaArrasto = nil
+                    })
+            }
+        }
     }
 
     // PTZ digital: pinça p/ zoom + arraste p/ pan (combinados).

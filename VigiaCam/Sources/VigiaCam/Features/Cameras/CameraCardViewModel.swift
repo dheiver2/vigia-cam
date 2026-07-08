@@ -17,9 +17,15 @@ class CameraCardViewModel: ObservableObject {
     private let cameraService = CameraService()
     private let detector = DetectorService()
     private let tracker = ObjectTracker()
+    private let lineCounter = LineCounter()
+    private let zoneMonitor = ZoneMonitor()
+    private var linhaAtiva = false
     private var detectTimer: Timer?
     private var displayTimer: Timer?                  // extrapola caixas a ~15 Hz
     private var frameCount = 0
+    private var displayTick = 0
+    private var intrusoesTotal = 0
+    private var permanenciasTotal = 0
     private var isDetecting = false
     private var bag = Set<AnyCancellable>()
 
@@ -87,8 +93,18 @@ class CameraCardViewModel: ObservableObject {
         case .local:
             cameraService.startLocalCamera()
         }
+        carregarAnalitico()
         startDetection()
         startDisplayLoop()
+    }
+
+    /// Reconstrói linha/zonas a partir da configuração persistida da câmera.
+    private func carregarAnalitico() {
+        let cfg = AnalyticsConfigService.shared.config(camera.url)
+        linhaAtiva = cfg.linhaAtiva
+        lineCounter.a = CGPoint(x: cfg.ax, y: cfg.ay)
+        lineCounter.b = CGPoint(x: cfg.bx, y: cfg.by)
+        zoneMonitor.zonas = cfg.zonas
     }
 
     func stop() {
@@ -108,9 +124,45 @@ class CameraCardViewModel: ObservableObject {
         displayTimer?.invalidate()
         displayTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.tracked = self.tracker.predicted(at: CACurrentMediaTime())
+            let agora = CACurrentMediaTime()
+            let objs = self.tracker.predicted(at: agora)
+            self.tracked = objs
+            self.rodarAnalitico(objs, now: agora)
         }
         RunLoop.main.add(displayTimer!, forMode: .common)   // .common: não pausa no scroll
+    }
+
+    /// Roda linha virtual + zonas sobre os objetos rastreados e reporta métricas
+    /// de negócio. Centro convertido p/ convenção topo-esq (igual à config/desenho).
+    private func rodarAnalitico(_ objs: [TrackedObject], now: TimeInterval) {
+        let alvos = objs.map {
+            Alvo(id: $0.id, classe: $0.label,
+                 centro: CGPoint(x: $0.box.midX, y: 1 - $0.box.midY))
+        }
+        if linhaAtiva { lineCounter.update(alvos) }
+        let eventos = zoneMonitor.update(alvos, now: now)
+        for e in eventos {
+            if e.tipo == .intrusao {
+                intrusoesTotal += 1
+                AlarmService.shared.emitir(camera: camera.nome, titulo: "Intrusão em zona",
+                    mensagem: "Intrusão (\(e.classe)) em zona restrita — \(camera.nome)", severidade: .critico)
+            } else if e.tipo == .permanencia {
+                permanenciasTotal += 1
+                AlarmService.shared.emitir(camera: camera.nome, titulo: "Permanência suspeita",
+                    mensagem: "Permanência prolongada (\(e.classe)) — \(camera.nome)", severidade: .aviso)
+            }
+        }
+        displayTick += 1
+        if displayTick % 15 == 0 {                 // reporta ~1×/s p/ o painel
+            var m = BusinessMetricsService.Metrica()
+            m.unicos = tracker.unicosPorClasse
+            m.entradas = lineCounter.totalEntradas
+            m.saidas = lineCounter.totalSaidas
+            m.ocupacao = zoneMonitor.ocupacao.values.reduce(0, +)
+            m.intrusoes = intrusoesTotal
+            m.permanencias = permanenciasTotal
+            BusinessMetricsService.shared.reportar(camera: camera.nome, metrica: m)
+        }
     }
 
     private func startDetection() {

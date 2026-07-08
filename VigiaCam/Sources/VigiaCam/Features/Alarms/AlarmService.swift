@@ -60,6 +60,30 @@ final class AlarmService: ObservableObject {
         return disparados
     }
 
+    /// Emite um alarme a partir de um analítico externo (zona/linha), com o
+    /// mesmo caminho de banner/evento/webhook/som. Debounce por título+câmera.
+    func emitir(camera: String, titulo: String, mensagem: String, severidade: Severidade) {
+        let chave = "ext|\(titulo)|\(camera)"
+        let agora = Date()
+        if let ult = ultimoDisparo[chave], agora.timeIntervalSince(ult) < debounce { return }
+        ultimoDisparo[chave] = agora
+        let ev = AlarmEvent(quando: agora, regra: titulo, camera: camera,
+                            mensagem: mensagem, severidade: severidade)
+        DispatchQueue.main.async {
+            self.recentes.insert(ev, at: 0)
+            if self.recentes.count > 200 { self.recentes.removeLast(self.recentes.count - 200) }
+            self.banner = ev
+            self.bannerTimer?.invalidate()
+            self.bannerTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+                self?.banner = nil
+            }
+            if self.somAtivo && severidade != .info { NSSound.beep() }
+        }
+        eventService?.registrar(tipo: "ALARME/\(severidade.rawValue)", camera: camera, detalhe: mensagem)
+        storage.auditar("alarme", detalhe: mensagem)
+        enviarWebhook(ev)
+    }
+
     @discardableResult
     private func disparar(regra: AlarmRule, camera: String, valor: Int) -> AlarmEvent {
         let alvo = regra.classe == "qualquer" ? "objetos" : regra.classe
@@ -107,7 +131,10 @@ final class AlarmService: ObservableObject {
         var r = regra; r.ativo.toggle(); atualizar(r)
     }
 
-    private func salvar() {
+    private func salvar() { persistirRegras() }
+
+    /// Persiste as regras atuais (usado ao aplicar um pacote de nicho).
+    func persistirRegras() {
         if let data = try? JSONEncoder().encode(regras) {
             storage.salvarRaw(data, para: "regras_alarme.json")
         }

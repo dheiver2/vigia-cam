@@ -42,6 +42,7 @@ struct ContentView: View {
 
             sidebarButton("Ao Vivo", icon: "video.fill", tag: "cameras")
             sidebarButton("Alarmes", icon: "bell.fill", tag: "alarms")
+            sidebarButton("Negócio", icon: "chart.line.uptrend.xyaxis", tag: "business")
             sidebarButton("Dashboard", icon: "chart.bar.fill", tag: "dashboard")
             sidebarButton("Eventos", icon: "bolt.fill", tag: "events")
             sidebarButton("Relatórios", icon: "doc.richtext.fill", tag: "reports")
@@ -88,6 +89,7 @@ struct ContentView: View {
         switch selectedTab {
         case "cameras": LiveWallView(storage: storage)
         case "alarms": AlarmsView(categorias: categorias)
+        case "business": BusinessDashboardView()
         case "dashboard": DashboardView(storage: storage, eventService: eventService, rbac: rbac)
         case "events": EventListView(eventService: eventService)
         case "reports": ReportsView(eventService: eventService, totalCameras: cameras.count,

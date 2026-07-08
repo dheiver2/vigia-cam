@@ -75,5 +75,27 @@ tk.update([Detection(label: "car", confidence: 0.8,
                      boundingBox: CGRect(x: 0.05, y: 0.05, width: 0.1, height: 0.1))], now: t + 0.4)
 check(tk.unicosPorClasse["car"] == 2, "objeto distante vira 2º único")
 
+print("== LineCounter (tripwire) ==")
+let lc = LineCounter()
+lc.update([Alvo(id: 1, classe: "person", centro: CGPoint(x: 0.3, y: 0.5))])
+lc.update([Alvo(id: 1, classe: "person", centro: CGPoint(x: 0.7, y: 0.5))])
+check(lc.totalEntradas + lc.totalSaidas == 1, "conta 1 cruzamento de linha")
+let lc3 = LineCounter()
+lc3.update([Alvo(id: 1, classe: "person", centro: CGPoint(x: 0.2, y: 0.5))])
+lc3.update([Alvo(id: 1, classe: "person", centro: CGPoint(x: 0.3, y: 0.5))])
+check(lc3.totalEntradas + lc3.totalSaidas == 0, "não conta sem cruzar")
+
+print("== ZoneMonitor ==")
+let zm = ZoneMonitor()
+zm.zonas = [ZonaAnalise(x: 0.4, y: 0.4, w: 0.2, h: 0.2, tipo: .intrusao)]
+let ev = zm.update([Alvo(id: 1, classe: "person", centro: CGPoint(x: 0.5, y: 0.5))], now: 100)
+check(zm.ocupacao.values.reduce(0, +) == 1, "ocupação conta objeto dentro da zona")
+check(ev.contains { $0.tipo == .intrusao }, "intrusão emitida na entrada")
+let zp = ZoneMonitor(); zp.limiarPermanenciaSeg = 8
+zp.zonas = [ZonaAnalise(x: 0, y: 0, w: 1, h: 1, tipo: .permanencia)]
+_ = zp.update([Alvo(id: 5, classe: "person", centro: CGPoint(x: 0.5, y: 0.5))], now: 200)
+let loit = zp.update([Alvo(id: 5, classe: "person", centro: CGPoint(x: 0.5, y: 0.5))], now: 209)
+check(loit.contains { $0.tipo == .permanencia }, "permanência (loitering) após o limiar")
+
 print("\nResultado: \(passou) passaram, \(falhou) falharam")
 exit(falhou == 0 ? 0 : 1)
