@@ -5,3 +5,4 @@ VigiaCam/.swiftpm/
 *.xcuserstate
 DerivedData/
 build/
+*.pt
