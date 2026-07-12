@@ -1,18 +1,7 @@
-.venv/
-__pycache__/
-*.pyc
-*.pt
-build/
 .DS_Store
-.pytest_cache/
-.ruff_cache/
-*.egg-info/
-dist/
-cameras_app/config.json
-
-# Swift
+*.app
 VigiaCam/.build/
 VigiaCam/.swiftpm/
 *.xcuserstate
 DerivedData/
-*.app
+build/
