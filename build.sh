@@ -25,6 +25,13 @@ if [ -n "$SPM_RESOURCES" ]; then
     echo "📦 Copied SPM resource bundle"
 fi
 
+if [ -f "AppIcon.icns" ]; then
+    cp AppIcon.icns VigiaCam.app/Contents/Resources/AppIcon.icns
+    echo "🎨 Ícone AppIcon.icns aplicado."
+else
+    echo "⚠️  AppIcon.icns não encontrado na raiz do projeto — bundle sem ícone."
+fi
+
 cat > VigiaCam.app/Contents/Info.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -44,6 +51,8 @@ cat > VigiaCam.app/Contents/Info.plist << 'EOF'
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>VigiaCam</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSApplicationCategoryType</key>

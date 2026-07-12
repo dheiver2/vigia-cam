@@ -16,6 +16,11 @@ enum ModelProvider {
     private static let lock = NSLock()
     private static var cache: Estado?
 
+    /// Resolução de entrada REAL do modelo, lida do próprio `.mlmodel` ao carregar
+    /// (em vez de assumir 640 fixo no parsing do output — se o modelo mudar de
+    /// resolução um dia, o parsing não quebra silenciosamente).
+    private(set) static var inputSize: CGFloat = 640
+
     static func shared() -> Estado {
         lock.lock(); defer { lock.unlock() }
         if let cache { return cache }
@@ -65,6 +70,11 @@ enum ModelProvider {
             let cfg = MLModelConfiguration()
             cfg.computeUnits = .all                 // Neural Engine + GPU + CPU
             let ml = try MLModel(contentsOf: compiladoURL, configuration: cfg)
+            if let imgInput = ml.modelDescription.inputDescriptionsByName.values.first(where: { $0.type == .image }),
+               let constraint = imgInput.imageConstraint {
+                inputSize = CGFloat(constraint.pixelsWide)
+                print("[Detector] resolução de entrada do modelo: \(Int(constraint.pixelsWide))x\(Int(constraint.pixelsHigh))")
+            }
             let vn = try VNCoreMLModel(for: ml)
             print("[Detector] YOLOv8n compilado e carregado")
             return .ok(vn)
@@ -83,8 +93,17 @@ final class DetectorService: ObservableObject {
 
     private var vnModel: VNCoreMLModel?
     var confidenceThreshold: Float = 0.25
+    /// Índices COCO permitidos (`AppConfig.classes`); `nil` = todas as classes.
+    var allowedClasses: Set<Int>?
     private let iouThreshold: Float = 0.45
     private let queue = DispatchQueue(label: "detector")
+
+    /// Limita quantas inferências CoreML rodam ao mesmo tempo em TODAS as câmeras.
+    /// Sem isso, um videowall 4×4 dispara até 16 inferências concorrentes disputando
+    /// o Neural Engine/GPU sem nenhum controle de throughput.
+    private static let inferenceSemaphore = DispatchSemaphore(
+        value: max(2, ProcessInfo.processInfo.activeProcessorCount / 2)
+    )
 
     static let cocoLabels = [
         "person","bicycle","car","motorcycle","airplane","bus","train","truck",
@@ -135,6 +154,8 @@ final class DetectorService: ObservableObject {
         request.imageCropAndScaleOption = .scaleFill
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        Self.inferenceSemaphore.wait()
+        defer { Self.inferenceSemaphore.signal() }
         do {
             try handler.perform([request])
         } catch {
@@ -147,6 +168,7 @@ final class DetectorService: ObservableObject {
             print("[Detector] Got \(objectResults.count) VNRecognizedObjectObservation")
             let dets = objectResults.compactMap { obs -> Detection? in
                 guard let label = obs.labels.first?.identifier, obs.labels.first!.confidence >= confidenceThreshold else { return nil }
+                if let allowed = allowedClasses, let idx = Self.cocoLabels.firstIndex(of: label), !allowed.contains(idx) { return nil }
                 return Detection(label: label, confidence: obs.labels.first!.confidence, boundingBox: obs.boundingBox)
             }
             updateUI(dets)
@@ -201,14 +223,17 @@ final class DetectorService: ObservableObject {
             }
 
             if bestScore < confidenceThreshold || bestClass < 0 { continue }
+            if let allowed = allowedClasses, !allowed.contains(bestClass) { continue }
 
             // Convenção Vision: origem no canto INFERIOR-esquerdo, normalizada.
-            // O YOLO devolve cx,cy do canto superior-esquerdo (0..640), então o
-            // Y precisa ser espelhado (640 - baixo) para casar com o overlay.
-            let x1 = (cx - w / 2) / 640.0
-            let y1 = (640.0 - (cy + h / 2)) / 640.0
-            let bw = w / 640.0
-            let bh = h / 640.0
+            // O YOLO devolve cx,cy do canto superior-esquerdo (0..N), onde N é a
+            // resolução de entrada REAL do modelo (lida em ModelProvider, não mais
+            // hardcoded) — o Y precisa ser espelhado (N - baixo) p/ casar com o overlay.
+            let n = Float(ModelProvider.inputSize)
+            let x1 = (cx - w / 2) / n
+            let y1 = (n - (cy + h / 2)) / n
+            let bw = w / n
+            let bh = h / n
 
             guard bw > 0, bh > 0, bw < 1, bh < 1 else { continue }
 

@@ -97,5 +97,38 @@ _ = zp.update([Alvo(id: 5, classe: "person", centro: CGPoint(x: 0.5, y: 0.5))], 
 let loit = zp.update([Alvo(id: 5, classe: "person", centro: CGPoint(x: 0.5, y: 0.5))], now: 209)
 check(loit.contains { $0.tipo == .permanencia }, "permanência (loitering) após o limiar")
 
+print("== Benchmark: ObjectTracker.update() ==")
+// Sem benchmark de latência de detecção real aqui (DetectorService importa Vision/
+// CoreML e precisa do .mlmodelc compilado dentro do bundle — não roda fora do app).
+// Isto mede o CUSTO DO TRACKER em si, que roda a cada inferência de CADA câmera.
+func benchTracker(numTracks: Int, numDets: Int, iters: Int) -> Double {
+    let bt = ObjectTracker()
+    let labels = ["person", "car", "truck", "bicycle", "dog"]
+    var t = 0.0
+    // aquece N tracks distintos
+    for i in 0..<numTracks {
+        let x = Double(i % 50) / 50.0
+        bt.update([Detection(label: labels[i % labels.count], confidence: 0.9,
+                             boundingBox: CGRect(x: x, y: 0.4, width: 0.05, height: 0.05))], now: t)
+        t += 0.4
+    }
+    let dets = (0..<numDets).map { i -> Detection in
+        let x = Double(i % 50) / 50.0
+        return Detection(label: labels[i % labels.count], confidence: 0.9,
+                         boundingBox: CGRect(x: x, y: 0.4, width: 0.05, height: 0.05))
+    }
+    let inicio = Date()
+    for _ in 0..<iters {
+        t += 0.4
+        bt.update(dets, now: t)
+    }
+    return Date().timeIntervalSince(inicio) * 1000 / Double(iters)   // ms/chamada
+}
+let msPoucos = benchTracker(numTracks: 10, numDets: 10, iters: 200)
+let msMuitos = benchTracker(numTracks: 80, numDets: 80, iters: 200)
+print(String(format: "  10 tracks/10 det:  %.4f ms/update", msPoucos))
+print(String(format: "  80 tracks/80 det:  %.4f ms/update", msMuitos))
+check(msMuitos < 50, "update() com 80 tracks/detecções fica sob 50ms (não trava o display loop de 15Hz)")
+
 print("\nResultado: \(passou) passaram, \(falhou) falharam")
 exit(falhou == 0 ? 0 : 1)

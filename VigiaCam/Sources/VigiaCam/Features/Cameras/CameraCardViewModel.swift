@@ -28,9 +28,15 @@ class CameraCardViewModel: ObservableObject {
     private var permanenciasTotal = 0
     private var isDetecting = false
     private var bag = Set<AnyCancellable>()
+    /// Carregada uma vez ao iniciar a câmera — antes a UI de Configurações (FPS
+    /// Máximo, Confiança Mínima, Classes) existia mas não tinha efeito nenhum no
+    /// motor de detecção real; agora `detector`/`startDetection()` a usam de fato.
+    private var appConfig: AppConfig = StorageService.shared.carregarConfig()
 
     init(camera: Camera) {
         self.camera = camera
+        detector.confidenceThreshold = appConfig.confianca
+        detector.allowedClasses = appConfig.classes.map(Set.init)
         cameraService.$currentFrame.assign(to: &$frameImage)
         cameraService.$fps.assign(to: &$fps)
         cameraService.$isRunning.assign(to: &$isOnline)
@@ -167,9 +173,12 @@ class CameraCardViewModel: ObservableObject {
 
     private func startDetection() {
         detectTimer?.invalidate()
-        // ~2,5 Hz: acompanha objetos em movimento sem empilhar inferências.
-        // O YOLOv8n roda no Neural Engine em poucos ms, então o custo é baixo.
-        detectTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+        // Intervalo derivado de AppConfig.fpsMax (config "FPS Máximo" da tela de
+        // Configurações — antes ignorada, sempre rodava a 0.4s/2,5Hz fixo). O guard
+        // `!self.isDetecting` abaixo + o semáforo global do DetectorService seguram
+        // a taxa real ao que o hardware aguenta, mesmo se o usuário pedir um valor alto.
+        let intervalo = 1.0 / Double(max(1, appConfig.fpsMax))
+        detectTimer = Timer.scheduledTimer(withTimeInterval: intervalo, repeats: true) { [weak self] _ in
             guard let self else { return }
             // pula se a inferência anterior ainda não terminou — evita fila de
             // frames velhos, que é justamente o que causa caixas "atrasadas".

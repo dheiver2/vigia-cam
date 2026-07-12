@@ -47,13 +47,20 @@ final class ObjectTracker {
     func update(_ dets: [Detection], now: TimeInterval) {
         var usados = Set<Int>()
 
+        // Agrupa os índices por label ANTES do laço de associação: cada track só
+        // precisa varrer as detecções da SUA classe, em vez de todas (antes era
+        // O(tracks × total_detecções); com cenas multi-classe — pessoa+carro+
+        // caminhão no mesmo frame — a maior parte da varredura era descartada
+        // pelo `label != label` logo de cara).
+        var porLabel: [String: [Int]] = [:]
+        for j in dets.indices { porLabel[dets[j].label, default: []].append(j) }
+
         for i in tracks.indices {
             var melhor = -1
             var menorDist = CGFloat.greatestFiniteMagnitude
             let pred = tracks[i].predictedBox(at: now)
             let cPred = Self.centro(pred)
-            for j in dets.indices where !usados.contains(j) {
-                if dets[j].label != tracks[i].label { continue }
+            for j in porLabel[tracks[i].label] ?? [] where !usados.contains(j) {
                 let cDet = Self.centro(dets[j].boundingBox)
                 let dist = hypot(cPred.x - cDet.x, cPred.y - cDet.y)
                 // gate ~ soma dos "raios" dos boxes + margem, com bônus se há IoU
