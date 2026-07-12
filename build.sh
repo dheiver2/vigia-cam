@@ -67,5 +67,8 @@ cat > VigiaCam.app/Contents/Info.plist << 'EOF'
 </plist>
 EOF
 
+echo "🔏 Assinando (ad-hoc)..."
+codesign --force --deep --sign - VigiaCam.app
+
 echo "✅ Done! Opening VigiaCam..."
 open VigiaCam.app
