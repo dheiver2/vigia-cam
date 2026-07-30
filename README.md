@@ -5,41 +5,39 @@
 ![Platform](https://img.shields.io/badge/macOS-14%2B-black)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Plataforma **VMS (Video Management System)** nativa para **macOS** que monitora
-múltiplas câmeras **RTSP/HLS** ao vivo em videowall, com **detecção de objetos por
-IA em tempo real** (YOLOv8n via Vision/CoreML no Neural Engine) e recursos de nível
-corporativo pensados para **editais de CFTV e segurança pública** — tudo **100% local**.
+Native **VMS (Video Management System)** platform for **macOS** that monitors
+multiple **RTSP/HLS** cameras on a live videowall, with **real-time AI object
+detection** (YOLOv8n via Vision/CoreML on Neural Engine) and enterprise-grade
+features built for **CCTV and public security** — all **100% local**.
 
-🔗 **Página do projeto:** https://dheiver2.github.io/vigia-cam/
+🔗 **Project page:** https://dheiver2.github.io/vigia-cam/
 
-![Demonstração do VIGIA·CAM](docs/demo.gif)
+![VIGIA·CAM demo](docs/demo.gif)
 
-## Funcionalidades
+## Features
 
-| Recurso | Descrição |
+| Feature | Description |
 |---|---|
-| **Videowall & Ronda** | Mosaicos 1×1 a 4×4, paginação por categoria, rodízio automático (ronda) e tela cheia |
-| **Detecção por IA** | YOLOv8n on-device (Vision/CoreML), pessoas/veículos e 80+ classes em tempo real |
-| **Alarmes inteligentes** | Regras por classe/limite/câmera (intrusão, aglomeração) com banner ao vivo, som e log |
-| **Evidência forense** | Snapshot e gravação MP4 com carimbo, hash SHA-256 e cadeia de custódia |
-| **Privacidade LGPD** | Máscaras de privacidade por câmera, aplicadas ao vivo e nas gravações |
-| **Relatórios PDF** | Relatório paginado de eventos por período, com autoria e totais |
-| **Controle de acesso** | Perfis admin/operador/visualizador (PBKDF2) + trilha de auditoria |
-| **Dados criptografados** | Configurações e usuários com AES-GCM (chave no Keychain) |
-| **Conexão resiliente** | Reconexão automática com backoff + watchdog de travamento |
+| **Videowall & Tour** | 1×1 to 4×4 layouts, category paging, auto rotation (tour), fullscreen |
+| **AI Detection** | YOLOv8n on-device (Vision/CoreML), people/vehicles and 80+ classes in real time |
+| **Smart Alarms** | Class/threshold/camera rules (intrusion, crowding) with live banner, sound, log |
+| **Forensic Evidence** | Snapshots and MP4 recordings with timestamp, SHA-256 hash, chain of custody |
+| **Privacy Masking** | Per-camera privacy masks applied live and in recordings |
+| **PDF Reports** | Paged event reports by date range, with metadata and totals |
+| **Encrypted Data** | Settings with AES-GCM (key in Keychain) |
+| **Resilient Connection** | Auto-reconnect with backoff + watchdog |
 
-Login padrão no primeiro uso: **admin / admin** (troque em produção).
-Todos os dados ficam em `~/Documents/VigiaCam`.
+All data is stored in `~/Documents/VigiaCam`.
 
-## Como compilar e rodar
+## How to build and run
 
-Requer **macOS 14+** e a toolchain do Swift (Xcode ou Command Line Tools).
+Requires **macOS 14+** and the Swift toolchain (Xcode or Command Line Tools).
 
 ```bash
-./build.sh      # compila (swift build -c release), monta VigiaCam.app e abre
+./build.sh      # compiles (swift build -c release), bundles VigiaCam.app and opens it
 ```
 
-Ou manualmente:
+Or manually:
 
 ```bash
 cd VigiaCam
@@ -47,46 +45,45 @@ swift build -c release
 swift run
 ```
 
-## Testes
+## Tests
 
 ```bash
 cd VigiaCam
-./run_tests.sh    # testes de lógica pura — rodam SEM Xcode (Command Line Tools)
-swift test        # suíte XCTest completa — requer Xcode
+./run_tests.sh    # pure logic tests — run WITHOUT Xcode (Command Line Tools)
+swift test        # full XCTest suite — requires Xcode
 ```
 
-`run_tests.sh` compila os fontes reais (Camera, AppConfig, AlarmRule) com um
-runner de asserções e cobre normalização de câmeras, validação/clamp de
-configuração e casamento de regras de alarme. A suíte XCTest adiciona
-CryptoService (AES-GCM), RBAC e StorageService.
+`run_tests.sh` compiles the real sources (Camera, AppConfig, AlarmRule) with an
+assertion runner and covers camera normalization, config validation/clamping,
+and alarm rule matching. The XCTest suite adds CryptoService (AES-GCM), RBAC,
+and StorageService.
 
-## Arquitetura
+## Architecture
 
 ```
 VigiaCam/Sources/VigiaCam/
-├── App/                    # entrada + navegação (ContentView)
+├── App/                    # entry point + navigation (ContentView)
 ├── Core/
 │   ├── Security/           # RBAC (PBKDF2) + CryptoService (AES-GCM)
-│   └── Storage/            # arquivos, eventos CSV, auditoria, cadeia de custódia
+│   └── Storage/            # files, CSV events, audit log, chain of custody
 ├── Features/
-│   ├── Live/               # videowall (layouts, ronda, tela cheia)
+│   ├── Live/               # videowall (layouts, tour, fullscreen)
 │   ├── Detection/          # YOLOv8n (Vision/CoreML, parsing + NMS)
-│   ├── Alarms/             # motor de regras + painel
-│   ├── Recording/          # snapshot + gravação de clipes
-│   ├── Privacy/            # zonas de privacidade (LGPD)
-│   ├── Reports/            # relatórios PDF
-│   ├── Cameras/            # captura HLS/RTSP, cards, viewer
+│   ├── Alarms/             # rule engine + panel
+│   ├── Recording/          # snapshots + clip recordings
+│   ├── Privacy/            # privacy zones (LGPD)
+│   ├── Reports/            # PDF reports
+│   ├── Cameras/            # HLS/RTSP capture, cards, viewer
 │   ├── Events/ Dashboard/ Config/ Auth/
-└── UI/                     # tema e componentes
+└── UI/                     # theme and components
 ```
 
-## ⚠️ Uso responsável
+## ⚠️ Responsible Use
 
-Use apenas com streams que você tem autorização para acessar (câmeras próprias,
-feeds públicos oficiais ou streams de teste). Acessar câmeras de terceiros sem
-autorização é invasão de privacidade e pode configurar crime (LGPD + art. 154-A
-do Código Penal).
+Only use streams you are authorized to access (your own cameras, official public
+feeds, or test streams). Accessing third-party cameras without authorization is
+a privacy violation and may constitute a crime.
 
-## Licença
+## License
 
 MIT — © Dheiver Santos

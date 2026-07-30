@@ -83,14 +83,23 @@ final class StorageService: ObservableObject {
 
     func salvarJSONCriptografado<T: Encodable>(_ dados: T, para filename: String) {
         guard let data = try? JSONEncoder().encode(dados) else { return }
-        let encrypted = CryptoService.encrypt(data)
+        // Se cifrar falhar, NÃO grava: escrever vazio por cima apagaria o
+        // arquivo bom que já estava lá.
+        guard let encrypted = CryptoService.encryptOrNil(data) else { return }
         salvarRaw(encrypted, para: filename)
     }
 
     func carregarJSONCriptografado<T: Decodable>(_ filename: String, as type: T.Type) -> T? {
-        guard let encrypted = carregarRaw(filename),
-              let data = CryptoService.decrypt(encrypted),
+        guard let encrypted = carregarRaw(filename) else { return nil }
+        guard let data = CryptoService.decrypt(encrypted),
               let decoded = try? JSONDecoder().decode(type, from: data) else {
+            // O arquivo existe mas não abre. Quem chama trata `nil` como "vazio"
+            // e regrava o padrão por cima — então guarda uma cópia antes, senão
+            // o dado do usuário some sem deixar rastro.
+            let backup = base.appendingPathComponent(filename + ".ilegivel")
+            try? FileManager.default.removeItem(at: backup)
+            try? FileManager.default.copyItem(at: base.appendingPathComponent(filename), to: backup)
+            print("[StorageService] \(filename) ilegível — cópia salva em \(backup.lastPathComponent)")
             return nil
         }
         return decoded
@@ -108,18 +117,44 @@ final class StorageService: ObservableObject {
 
     // MARK: - Cameras
 
+    /// Incrementado a cada gravação de `cameras.json`. As telas que mantêm a
+    /// lista em `@State` (carregada só no `.onAppear`) observam isto para
+    /// recarregar — senão adicionar/remover uma câmera em Configurações só
+    /// aparecia no Ao Vivo/Dashboard depois de reiniciar o app.
+    @Published private(set) var camerasVersao = 0
+
     func salvarCameras(_ cameras: [Camera]) {
         salvarJSONCriptografado(cameras, para: "cameras.json")
+        if Thread.isMainThread { camerasVersao &+= 1 }
+        else { DispatchQueue.main.async { self.camerasVersao &+= 1 } }
     }
 
     func carregarCameras() -> [Camera] {
-        let loaded = carregarJSONCriptografado("cameras.json", as: [Camera].self) ?? []
+        var loaded = carregarJSONCriptografado("cameras.json", as: [Camera].self) ?? []
+        // Expurga câmeras de seeds antigos cujos servidores morreram (ex. o
+        // lote SDOT de Seattle) — senão instalações antigas ficam presas a
+        // dezenas de tiles OFFLINE para sempre.
+        let semMortas = loaded.filter { cam in
+            !CamerasSeed.hostsMortos.contains { cam.url.contains($0) }
+        }
+        if semMortas.count != loaded.count {
+            loaded = semMortas
+            salvarCameras(loaded)
+        }
         if loaded.isEmpty {
-            let defaults = Camera.camerasPublicas
+            let defaults = CamerasSeed.publicas
             salvarCameras(defaults)
             return defaults
         }
-        return loaded
+        // Mescla câmeras padrão novas (adicionadas em versões depois do 1º uso,
+        // ex. o lote de demonstração "Trânsito / Demo") que ainda não estão no
+        // arquivo persistido — por id (url), sem sobrescrever nada já salvo.
+        let idsExistentes = Set(loaded.map { $0.id })
+        let novas = CamerasSeed.publicas.filter { !idsExistentes.contains($0.id) }
+        guard !novas.isEmpty else { return loaded }
+        let mesclado = loaded + novas
+        salvarCameras(mesclado)
+        return mesclado
     }
 
     // MARK: - Event History (CSV)

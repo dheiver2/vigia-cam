@@ -17,39 +17,38 @@ func check(_ cond: Bool, _ nome: String) {
 }
 
 print("== Camera ==")
-let c = Camera.normalize(["url": "rtsp://ex.com/s", "nome": "Cam1"])
-check(c != nil, "normalize URL válida retorna câmera")
-check(c?.nome == "Cam1", "normalize preserva nome")
-check(c?.tipo == .rtsp, "normalize infere tipo rtsp")
-check(Camera.normalize(["url": ""]) == nil, "normalize rejeita URL vazia")
-check(Camera.normalize(["url": "https://b.com/x.m3u8"])?.nome == "https://b.com/x.m3u8",
-      "normalize usa URL como nome padrão")
+let c = Camera(nome: "Cam1", categoria: "Entrada", url: "rtsp://ex.com/s")
+check(c != nil, "URL válida constrói câmera")
+check(c?.nome == "Cam1", "preserva nome")
+check(c?.tipo == .rtsp, "infere tipo rtsp")
+check(Camera(nome: "x", categoria: "y", url: "") == nil, "rejeita URL vazia")
+check(Camera(nome: "", categoria: "y", url: "https://b.com/x.m3u8")?.nome == "https://b.com/x.m3u8",
+      "usa URL como nome padrão")
 
 let cams = [
-    Camera(nome: "A1", categoria: "Entrada", tipo: .rtsp, url: "rtsp://a/1"),
-    Camera(nome: "A2", categoria: "Entrada", tipo: .rtsp, url: "rtsp://a/2"),
-    Camera(nome: "B1", categoria: "Pátio", tipo: .hls, url: "https://b/1"),
+    Camera(nome: "A1", categoria: "Entrada", url: "rtsp://a/1")!,
+    Camera(nome: "A2", categoria: "Entrada", url: "rtsp://a/2")!,
+    Camera(nome: "B1", categoria: "Pátio", url: "https://b/1")!,
 ]
 let grupos = Camera.groupByCategory(cams)
 check(grupos.count == 2, "groupByCategory agrupa em 2 categorias")
 check(grupos.first(where: { $0.0 == "Entrada" })?.1.count == 2, "categoria Entrada tem 2 câmeras")
 
 print("== AppConfig ==")
-let inval = AppConfig(fpsMax: 999, confianca: -1, imgsz: 500, classes: nil,
-                      colunas: 2, linhas: 2, retencapDias: 30, zonasPrivacidade: nil)
+let inval = AppConfig(fpsMax: 999, confianca: -1, imgsz: 500, classesMonitoradas: nil,
+                      colunas: 2, linhas: 2, retencaoDias: 30)
 let v = inval.validated()
 check(v.fpsMax == 60, "clampa fpsMax ao máximo (60)")
 check(v.confianca == 0.05, "clampa confiança ao mínimo (0.05)")
 check(v.imgsz % 32 == 0, "imgsz ajustado a múltiplo de 32")
 let d = AppConfig.default
-check(d.fpsMax == 15 && d.imgsz == 480 && d.confianca == 0.40, "valores padrão corretos")
+check(d.fpsMax == 15 && d.imgsz == 640 && d.confianca == 0.40, "valores padrão corretos")
 
 print("== AlarmRule ==")
-let r = AlarmRule(nome: "Aglomeração", classe: "person", limite: 5, escopo: nil, severidade: .aviso)
-check(r.casaCamera(nome: "Qualquer", categoria: "X"), "escopo nil casa qualquer câmera")
-let rEsc = AlarmRule(nome: "R", classe: "car", limite: 3, escopo: "Pátio", severidade: .info)
+let r = AlarmRule(nome: "Aglomeração", alvo: .classe("person"), limite: 5, severidade: .aviso)
+check(r.casaCamera(nome: "Qualquer", categoria: "X"), "escopo .todas casa qualquer câmera")
+let rEsc = AlarmRule(nome: "R", alvo: .classe("car"), limite: 3, escopo: .categoria("Pátio"), severidade: .info)
 check(rEsc.casaCamera(nome: "Z", categoria: "Pátio"), "escopo casa por categoria")
-check(rEsc.casaCamera(nome: "Pátio", categoria: "Outra"), "escopo casa por nome")
 check(!rEsc.casaCamera(nome: "Z", categoria: "Outra"), "escopo NÃO casa fora do alvo")
 check(AlarmRule.exemplos.count == 3, "3 regras de exemplo")
 check(Severidade.critico.label == "Crítico", "label de severidade")
@@ -129,6 +128,101 @@ let msMuitos = benchTracker(numTracks: 80, numDets: 80, iters: 200)
 print(String(format: "  10 tracks/10 det:  %.4f ms/update", msPoucos))
 print(String(format: "  80 tracks/80 det:  %.4f ms/update", msMuitos))
 check(msMuitos < 50, "update() com 80 tracks/detecções fica sob 50ms (não trava o display loop de 15Hz)")
+
+// MARK: - Camera.urlSuportada
+
+print("\n== Camera.urlSuportada ==")
+check(Camera.urlSuportada("https://exemplo.com/a.m3u8"), "aceita https")
+check(Camera.urlSuportada("rtsp://10.0.0.5:554/stream"), "aceita rtsp com porta")
+check(Camera.urlSuportada("  http://exemplo.com/x  "), "ignora espaços em volta")
+check(!Camera.urlSuportada(""), "rejeita vazio")
+check(!Camera.urlSuportada("exemplo.com/a.m3u8"), "rejeita URL sem esquema")
+check(!Camera.urlSuportada("ftp://exemplo.com/a"), "rejeita esquema não suportado")
+check(!Camera.urlSuportada("https://"), "rejeita URL sem host")
+
+// MARK: - Modelagem: identidade, migração e tipos explícitos
+
+print("\n== Camera: identidade separada do endereço ==")
+let c1 = Camera(nome: "Portaria", categoria: "Entrada", url: "rtsp://10.0.0.9/live")!
+var c2 = c1
+c2.url = "rtsp://10.0.0.10/live"     // câmera trocou de IP
+check(c1.id == c2.id, "trocar a URL preserva a identidade")
+check(c2.tipo == .rtsp, "tipo derivado do esquema (rtsp)")
+check(Camera(nome: "x", categoria: "y", url: "https://h/a.m3u8")!.tipo == .hls, "tipo derivado do esquema (hls)")
+check(Camera(nome: "x", categoria: "y", url: "não é url") == nil, "init recusa endereço inválido")
+check(Camera(nome: "  ", categoria: "  ", url: "https://h/a")!.categoria == "Outras", "categoria vazia cai no padrão")
+
+print("\n== Camera: lê o formato antigo (sem id) ==")
+let jsonAntigo = #"[{"nome":"Cam 1","categoria":"Entrada","tipo":"hls","url":"https://h/a.m3u8"}]"#
+let antigas = try! JSONDecoder().decode([Camera].self, from: Data(jsonAntigo.utf8))
+check(antigas.count == 1, "decodifica registro antigo")
+check(antigas[0].id == "https://h/a.m3u8", "sem id, a identidade continua sendo a URL (não perde config por câmera)")
+check(antigas[0].nome == "Cam 1", "preserva o nome")
+
+print("\n== AppConfig: limites e migração ==")
+let bruta = AppConfig(fpsMax: 999, confianca: 9, imgsz: 5000,
+                      classesMonitoradas: [], colunas: 99, linhas: 0, retencaoDias: 99999)
+let val = bruta.validated()
+check(val.fpsMax == 60, "fpsMax limitado a 60")
+check(val.colunas == 8 && val.linhas == 1, "colunas/linhas limitadas (antes passavam direto)")
+check(val.retencaoDias == 365, "retenção limitada a 365 (antes passava direto)")
+check(val.classesMonitoradas == nil, "conjunto vazio vira nil (= todas)")
+let cfgAntigo = #"{"fpsMax":20,"confianca":0.5,"imgsz":480,"colunas":2,"linhas":2,"retencapDias":7,"classes":[0,2]}"#
+let cfgMigrado = try! JSONDecoder().decode(AppConfig.self, from: Data(cfgAntigo.utf8))
+check(cfgMigrado.retencaoDias == 7, "lê a chave antiga com typo (retencapDias)")
+check(cfgMigrado.classesMonitoradas == ["person", "car"], "converte índices COCO antigos para nomes")
+
+print("\n== AlarmRule: alvo e escopo explícitos ==")
+let rTodas = AlarmRule(nome: "r", alvo: .qualquerObjeto, limite: 3, severidade: .info)
+check(rTodas.casaCamera(nome: "A", categoria: "B"), "escopo .todas casa qualquer câmera")
+check(rTodas.alvo.valor(em: ["person": 2, "car": 2]) == 4, "alvo .qualquerObjeto soma tudo")
+check(rTodas.disparou(counts: ["person": 3]), "dispara no limite")
+check(!rTodas.disparou(counts: ["person": 2]), "não dispara abaixo do limite")
+let rCat = AlarmRule(nome: "r", alvo: .classe("person"), limite: 1, escopo: .categoria("Entrada"), severidade: .info)
+check(rCat.casaCamera(nome: "X", categoria: "Entrada"), "escopo por categoria casa a categoria")
+check(!rCat.casaCamera(nome: "Entrada", categoria: "Outra"), "escopo por categoria NÃO casa uma câmera de mesmo nome")
+let rCam = AlarmRule(nome: "r", alvo: .classe("person"), limite: 1, escopo: .camera("Entrada"), severidade: .info)
+check(rCam.casaCamera(nome: "Entrada", categoria: "Outra"), "escopo por câmera casa o nome")
+check(!rCam.casaCamera(nome: "X", categoria: "Entrada"), "escopo por câmera NÃO casa a categoria homônima")
+check(AlarmRule(nome: "r", alvo: .classe("person"), limite: 0, severidade: .info).limite == 1,
+      "limite < 1 é corrigido (senão dispararia com zero objetos)")
+
+print("\n== AlarmRule: lê o formato antigo ==")
+let regraAntiga = #"{"id":"r1","nome":"Antiga","classe":"qualquer","limite":4,"escopo":"Portaria","severidade":"aviso","ativo":true}"#
+let ra = try! JSONDecoder().decode(AlarmRule.self, from: Data(regraAntiga.utf8))
+check(ra.alvo == .qualquerObjeto, #"classe "qualquer" vira .qualquerObjeto"#)
+check(ra.escopo == .camera("Portaria"), "escopo em texto vira .camera")
+check(ra.limite == 4 && ra.id == "r1", "demais campos preservados")
+let semEscopo = #"{"nome":"N","classe":"person","limite":2,"severidade":"info"}"#
+check(try! JSONDecoder().decode(AlarmRule.self, from: Data(semEscopo.utf8)).escopo == .todas,
+      "escopo ausente vira .todas")
+
+print("\n== Vocabulário de classes ==")
+check(ClassesCOCO.nomes.count == 80, "COCO tem 80 classes")
+check(ClassesCOCO.nome(indice: 0) == "person", "índice 0 = person")
+check(ClassesCOCO.nome(indice: 999) == nil, "índice fora da faixa devolve nil")
+check(ClassesEPI.nomes.count == 10, "EPI tem 10 classes")
+check(ClassesEPI.indice(nome: "NO-Hardhat") == 2, "índice de NO-Hardhat")
+
+// MARK: - CryptoService (persistência da chave)
+
+print("\n== CryptoService ==")
+// Regressão: a chave era gravada com `withUnsafeBytes(of: key)`, que pega os
+// bytes da struct (um ponteiro) em vez do material da chave. O `SecItemAdd`
+// falhava calado e cada chamada gerava uma chave nova — nada do que era salvo
+// (câmeras, config, usuários) conseguia ser lido de volta.
+let claro = Data("câmera de teste ✓".utf8)
+let cifrado = CryptoService.encrypt(claro)
+check(cifrado != claro, "encrypt() não devolve o texto claro")
+check(CryptoService.decrypt(cifrado) == claro, "decrypt(encrypt(x)) == x")
+check(CryptoService.decrypt(Data("lixo".utf8)) == nil, "decrypt() devolve nil em dado inválido")
+
+// A chave tem de vir do Keychain — duas leituras seguidas precisam ser a MESMA,
+// senão o dado gravado num lançamento fica ilegível no próximo.
+let k1 = CryptoService.loadOrCreateKey().withUnsafeBytes { Data($0) }
+let k2 = CryptoService.loadOrCreateKey().withUnsafeBytes { Data($0) }
+check(k1.count == 32, "chave tem 256 bits (\(k1.count * 8))")
+check(k1 == k2, "loadOrCreateKey() é estável (persistida no Keychain)")
 
 print("\nResultado: \(passou) passaram, \(falhou) falharam")
 exit(falhou == 0 ? 0 : 1)

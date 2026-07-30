@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var storage: StorageService
-    @ObservedObject var rbac: RBACService
     @ObservedObject var eventService: EventService
     @State private var selectedTab = "cameras"
     @State private var currentTime = ""
@@ -24,7 +23,11 @@ struct ContentView: View {
             updateTime()
             cameras = storage.carregarCameras()
             AlarmService.shared.configure(eventService: eventService, cameras: cameras)
-            RecordingService.shared.definirUsuario(rbac.usuarioAtual?.usuario ?? "sistema")
+            RecordingService.shared.definirUsuario("sistema")
+        }
+        .onChange(of: storage.camerasVersao) {
+            cameras = storage.carregarCameras()
+            AlarmService.shared.configure(eventService: eventService, cameras: cameras)
         }
     }
 
@@ -49,19 +52,6 @@ struct ContentView: View {
             sidebarButton("Configurações", icon: "gearshape.fill", tag: "config")
 
             Spacer()
-
-            Divider().background(VigiaTheme.border)
-
-            if let user = rbac.usuarioAtual {
-                HStack(spacing: 8) {
-                    Image(systemName: "person.circle.fill").font(.system(size: 16)).foregroundColor(VigiaTheme.accent)
-                    Text(user.usuario).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
-                    Spacer()
-                    Button(action: { rbac.logout() }) {
-                        Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 12)).foregroundColor(VigiaTheme.danger)
-                    }.buttonStyle(.plain)
-                }.padding(.horizontal, 16).padding(.vertical, 10)
-            }
         }
         .frame(width: 200)
         .background(VigiaTheme.panel)
@@ -90,11 +80,11 @@ struct ContentView: View {
         case "cameras": LiveWallView(storage: storage)
         case "alarms": AlarmsView(categorias: categorias)
         case "business": BusinessDashboardView()
-        case "dashboard": DashboardView(storage: storage, eventService: eventService, rbac: rbac)
+        case "dashboard": DashboardView(storage: storage, eventService: eventService)
         case "events": EventListView(eventService: eventService)
         case "reports": ReportsView(eventService: eventService, totalCameras: cameras.count,
-                                     usuario: rbac.usuarioAtual?.usuario ?? "sistema")
-        case "config": ConfigView(storage: storage, rbac: rbac)
+                                     usuario: "sistema")
+        case "config": ConfigView(storage: storage)
         default: LiveWallView(storage: storage)
         }
     }

@@ -13,6 +13,9 @@ swiftc -o "$OUT" \
   "$SRC/Features/Alarms/AlarmModels.swift" \
   "$SRC/Features/Detection/ObjectTracker.swift" \
   "$SRC/Features/Business/BusinessAnalytics.swift" \
+  "$SRC/Core/Security/CryptoService.swift" \
+  "$SRC/Features/Config/AppConfig.swift" \
+  "$SRC/Features/Detection/ClassesModelo.swift" \
   "Tests-cli/main.swift"
 
 echo "== Executando testes =="

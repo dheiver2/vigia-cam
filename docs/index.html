@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VIGIA·CAM — Videomonitoramento Inteligente</title>
-<meta name="description" content="Plataforma VMS desktop para macOS: videowall ao vivo, detecção de objetos por IA, alarmes inteligentes, evidências com cadeia de custódia, privacidade LGPD e relatórios.">
+<title>VIGIA·CAM — Intelligent Video Monitoring</title>
+<meta name="description" content="Desktop VMS platform for macOS: live videowall, AI object detection, smart alarms, chain-of-custody evidence, LGPD privacy masking, and PDF reports.">
 <style>
   :root{
     --bg:#0a0b0e; --panel:#121419; --card:#171a21; --border:#23262f;
@@ -63,8 +63,8 @@
   <div class="nav">
     <div class="logo">VIGIA<span>·CAM</span></div>
     <div class="links">
-      <a href="#recursos">Recursos</a>
-      <a href="#stack">Tecnologia</a>
+      <a href="#features">Features</a>
+      <a href="#stack">Tech Stack</a>
       <a href="https://github.com/dheiver2/vigia-cam">GitHub</a>
     </div>
   </div>
@@ -73,67 +73,69 @@
 <div class="wrap">
   <div class="hero">
     <div class="badge-tier">VMS · Video Management System</div>
-    <h1>Videomonitoramento <span>inteligente</span><br>com IA 100% local</h1>
+    <h1>Intelligent <span>video monitoring</span><br>with 100% on-device AI</h1>
     <p class="lead">
-      Plataforma desktop nativa para macOS que monitora múltiplas câmeras RTSP/HLS
-      ao vivo em videowall, com detecção de pessoas e veículos por IA em tempo real
-      (YOLOv8n no Neural Engine) e alarmes inteligentes por regras configuráveis.
-      Captura de evidências com cadeia de custódia SHA-256, máscaras de privacidade
-      LGPD, relatórios em PDF e controle de acesso por perfis — pensado para editais
-      de CFTV e segurança pública.
+      Native desktop VMS for macOS that monitors multiple RTSP/HLS cameras
+      on a live videowall, with real-time person and vehicle detection
+      (YOLOv8n on Neural Engine) and smart rule-based alarms.
+      Capture evidence with SHA-256 chain of custody, LGPD privacy masks,
+      PDF reports — built for CCTV
+      and public security deployments.
     </p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/dheiver2/vigia-cam">Ver no GitHub</a>
-      <a class="btn ghost" href="#recursos">Conhecer recursos</a>
+      <a class="btn primary" href="https://github.com/dheiver2/vigia-cam/releases/latest/download/VigiaCam-macOS.zip">&#8595; Download para macOS</a>
+      <a class="btn ghost" href="https://github.com/dheiver2/vigia-cam">View on GitHub</a>
+      <a class="btn ghost" href="#features">Explore features</a>
     </div>
+    <p class="cap" style="margin-top:10px">Requer macOS 14+ (Apple Silicon ou Intel). N&atilde;o h&aacute; vers&atilde;o Windows: o app &eacute; 100% nativo macOS (SwiftUI + CoreML/Neural Engine).</p>
   </div>
 
   <div class="shot">
-    <img src="demo.gif" alt="VIGIA·CAM em funcionamento: videowall com detecção de objetos e alarme">
+    <img src="demo.gif" alt="VIGIA·CAM running: videowall with object detection and alarm">
   </div>
-  <p class="cap">Videowall ao vivo com detecção por IA, alarme de aglomeração e indicadores de gravação — saída real do modelo YOLOv8n.</p>
+  <p class="cap">Live videowall with AI detection, congestion alarm, and recording indicators — actual YOLOv8n model output.</p>
 </div>
 
-<section id="recursos">
+<section id="features">
   <div class="wrap">
-    <h2>Recursos de nível corporativo</h2>
-    <p class="sub">Paridade com os principais VMS do mercado (Milestone, Digifort, Intelbras, Genetec), rodando 100% offline.</p>
+    <h2>Enterprise-Grade Features</h2>
+    <p class="sub">On par with leading VMS platforms (Milestone, Digifort, Intelbras, Genetec), running 100% offline.</p>
     <div class="grid">
-      <div class="feat"><div class="ic">🧱</div><h3>Videowall & Ronda</h3>
-        <p>Mosaicos 1×1 a 4×4, paginação por categoria, rodízio automático de câmeras (ronda) e tela cheia.</p>
-        <span class="tag">Ao Vivo</span></div>
-      <div class="feat"><div class="ic">🧠</div><h3>Detecção por IA</h3>
-        <p>YOLOv8n via Vision/CoreML no Neural Engine, identificando pessoas, veículos e mais de 80 classes em tempo real.</p>
+      <div class="feat"><div class="ic">🧱</div><h3>Videowall & Tour</h3>
+        <p>Layouts from 1×1 up to 4×4, category-based paging, auto camera rotation (tour), and fullscreen.</p>
+        <span class="tag">Live</span></div>
+      <div class="feat"><div class="ic">🧠</div><h3>AI Detection</h3>
+        <p>YOLOv8n via Vision/CoreML on Neural Engine, detecting people, vehicles, and 80+ classes in real time.</p>
         <span class="tag">On-device</span></div>
-      <div class="feat"><div class="ic">🚨</div><h3>Alarmes inteligentes</h3>
-        <p>Regras por classe, limite e câmera (intrusão, aglomeração, congestionamento) com banner ao vivo, som e log.</p>
-        <span class="tag">Analíticos</span></div>
-      <div class="feat"><div class="ic">🎥</div><h3>Evidência forense</h3>
-        <p>Snapshot e gravação de clipes com carimbo de data/hora, hash SHA-256 e cadeia de custódia para validade probatória.</p>
-        <span class="tag">Cadeia de custódia</span></div>
-      <div class="feat"><div class="ic">🛡️</div><h3>Privacidade LGPD</h3>
-        <p>Máscaras de privacidade por câmera que tampam áreas sensíveis ao vivo, nas gravações e nos snapshots.</p>
+      <div class="feat"><div class="ic">🚨</div><h3>Smart Alarms</h3>
+        <p>Rules by class, threshold, and camera (intrusion, crowding, congestion) with live banner, sound, and logging.</p>
+        <span class="tag">Analytics</span></div>
+      <div class="feat"><div class="ic">🎥</div><h3>Forensic Evidence</h3>
+        <p>Snapshots and clip recordings with timestamp, SHA-256 hash, and chain of custody for evidentiary validity.</p>
+        <span class="tag">Chain of Custody</span></div>
+      <div class="feat"><div class="ic">🛡️</div><h3>Privacy Masking</h3>
+        <p>Per-camera privacy masks that cover sensitive areas live, in recordings, and in snapshots.</p>
         <span class="tag">LGPD</span></div>
-      <div class="feat"><div class="ic">📄</div><h3>Relatórios PDF</h3>
-        <p>Relatórios paginados de eventos por período, com autoria e totais — prontos para instrução de processos.</p>
-        <span class="tag">Exportação</span></div>
-      <div class="feat"><div class="ic">👥</div><h3>Controle de acesso</h3>
-        <p>Perfis admin/operador/visualizador com senha PBKDF2 e trilha de auditoria de todas as ações.</p>
+      <div class="feat"><div class="ic">📄</div><h3>PDF Reports</h3>
+        <p>Paged event reports by date range, with metadata and totals — ready for legal proceedings.</p>
+        <span class="tag">Export</span></div>
+      <div class="feat"><div class="ic">👥</div><h3>Access Control</h3>
+        <p>Admin/operator/viewer roles with PBKDF2 password hashing and audit trail of all actions.</p>
         <span class="tag">RBAC</span></div>
-      <div class="feat"><div class="ic">🔒</div><h3>Dados criptografados</h3>
-        <p>Configurações e usuários protegidos com AES-GCM (chave no Keychain). Tudo armazenado localmente.</p>
+      <div class="feat"><div class="ic">🔒</div><h3>Encrypted Data</h3>
+        <p>Settings and users protected with AES-GCM (key in Keychain). Everything stored locally.</p>
         <span class="tag">AES-GCM</span></div>
-      <div class="feat"><div class="ic">📡</div><h3>Conexão resiliente</h3>
-        <p>Reconexão automática com backoff e watchdog de travamento — as câmeras voltam sozinhas quando o sinal retorna.</p>
-        <span class="tag">Alta disponibilidade</span></div>
+      <div class="feat"><div class="ic">📡</div><h3>Resilient Connection</h3>
+        <p>Auto-reconnect with exponential backoff and watchdog — cameras recover automatically when the signal returns.</p>
+        <span class="tag">High Availability</span></div>
     </div>
   </div>
 </section>
 
 <section id="stack" style="background:var(--panel)">
   <div class="wrap">
-    <h2>Tecnologia</h2>
-    <p class="sub">Nativo, leve e sem dependência de nuvem.</p>
+    <h2>Tech Stack</h2>
+    <p class="sub">Native, lightweight, with zero cloud dependencies.</p>
     <div class="stack">
       <div class="chip"><b>Swift</b> + SwiftUI</div>
       <div class="chip"><b>Vision</b> / CoreML</div>
@@ -143,14 +145,14 @@
       <div class="chip">macOS 14+</div>
     </div>
     <div class="warn">
-      ⚖️ Uso responsável: opere apenas com câmeras que você tem autorização para acessar.
-      Acessar streams de terceiros sem autorização pode configurar crime (LGPD + art. 154-A do Código Penal).
+      ⚖️ Responsible use: only operate cameras you are authorized to access.
+      Accessing third-party streams without authorization may constitute a crime.
     </div>
   </div>
 </section>
 
 <footer>
-  VIGIA·CAM — desenvolvido por <a href="https://github.com/dheiver2">Dheiver Santos</a> · Licença MIT ·
+  VIGIA·CAM — built by <a href="https://github.com/dheiver2">Dheiver Santos</a> · MIT License ·
   <a href="https://github.com/dheiver2/vigia-cam">github.com/dheiver2/vigia-cam</a>
 </footer>
 </body>

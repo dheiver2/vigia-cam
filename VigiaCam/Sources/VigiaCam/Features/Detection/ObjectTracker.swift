@@ -4,7 +4,7 @@ import CoreGraphics
 /// Objeto rastreado com identidade persistente e modelo de movimento.
 struct TrackedObject: Identifiable {
     let id: Int
-    let label: String
+    var label: String
     var confidence: Float
     var box: CGRect            // último box suavizado (Vision: origem inferior-esq, 0–1)
     var vx: CGFloat            // velocidade do centro (unid. normalizadas por segundo)
@@ -12,6 +12,12 @@ struct TrackedObject: Identifiable {
     var lastUpdate: TimeInterval
     var hits: Int
     var missed: Int
+    /// Últimos rótulos observados (mais recente por último), p/ votação de
+    /// maioria — classes visualmente próximas (ex. "car"/"truck", ou
+    /// "Hardhat"/"NO-Hardhat" num ângulo ruim) alternam frame a frame mesmo
+    /// para o MESMO objeto físico; sem isso, o rótulo exibido/alarmado
+    /// "pisca" a cada inferência em vez de refletir a classe mais consistente.
+    var historicoLabel: [String]
 
     /// Box extrapolado para o instante `t` pelo modelo de velocidade constante.
     func predictedBox(at t: TimeInterval) -> CGRect {
@@ -36,6 +42,8 @@ final class ObjectTracker {
     private let confirmar = 2             // hits p/ um track ser exibido
     private let emaPos: CGFloat = 0.6     // suavização do box (0=lento, 1=cru)
     private let emaVel: CGFloat = 0.4     // suavização da velocidade
+    private let emaConf: Float = 0.5      // suavização da confiança exibida (reduz "flicker" de score)
+    private let janelaLabel = 5           // quantos rótulos recentes entram na votação de maioria
 
     /// Atualiza os tracks com as detecções de UM frame.
     ///
@@ -81,10 +89,19 @@ final class ObjectTracker {
                 tracks[i].vx = tracks[i].vx * (1 - emaVel) + ivx * emaVel
                 tracks[i].vy = tracks[i].vy * (1 - emaVel) + ivy * emaVel
                 tracks[i].box = Self.lerp(tracks[i].box, d.boundingBox, emaPos)
-                tracks[i].confidence = d.confidence
+                // EMA em vez de snap: um score isolado baixo/alto num único
+                // frame não derruba nem infla de repente a confiança exibida
+                // (e usada nos alarmes de threshold).
+                tracks[i].confidence = tracks[i].confidence * (1 - emaConf) + d.confidence * emaConf
                 tracks[i].lastUpdate = now
                 tracks[i].hits += 1
                 tracks[i].missed = 0
+
+                tracks[i].historicoLabel.append(d.label)
+                if tracks[i].historicoLabel.count > janelaLabel {
+                    tracks[i].historicoLabel.removeFirst()
+                }
+                tracks[i].label = Self.rotuloMajoritario(tracks[i].historicoLabel)
             } else {
                 tracks[i].missed += 1
             }
@@ -95,7 +112,8 @@ final class ObjectTracker {
             let d = dets[j]
             tracks.append(TrackedObject(id: proximoId, label: d.label, confidence: d.confidence,
                                         box: d.boundingBox, vx: 0, vy: 0,
-                                        lastUpdate: now, hits: 1, missed: 0))
+                                        lastUpdate: now, hits: 1, missed: 0,
+                                        historicoLabel: [d.label]))
             unicosPorClasse[d.label, default: 0] += 1
             proximoId += 1
         }
@@ -114,6 +132,18 @@ final class ObjectTracker {
     }
 
     func resetContagem() { unicosPorClasse.removeAll() }
+
+    /// Rótulo mais frequente na janela recente; empate resolvido pelo mais
+    /// recente (mantém o track reativo caso o objeto tenha genuinamente virado
+    /// outra coisa, ex. "car" oculto virando "truck" quando desoclui).
+    private static func rotuloMajoritario(_ historico: [String]) -> String {
+        var contagem: [String: Int] = [:]
+        for l in historico { contagem[l, default: 0] += 1 }
+        guard let maiorContagem = contagem.values.max() else { return historico.last ?? "" }
+        let empatados = contagem.filter { $0.value == maiorContagem }.map(\.key)
+        if empatados.count == 1 { return empatados[0] }
+        return historico.last(where: { empatados.contains($0) }) ?? historico.last ?? ""
+    }
 
     // MARK: - Geometria
     private static func centro(_ r: CGRect) -> CGPoint { CGPoint(x: r.midX, y: r.midY) }

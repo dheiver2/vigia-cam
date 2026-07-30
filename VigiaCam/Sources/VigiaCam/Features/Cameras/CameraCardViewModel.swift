@@ -12,6 +12,7 @@ class CameraCardViewModel: ObservableObject {
     @Published var tracked: [TrackedObject] = []      // caixas rastreadas/preditas
     @Published var unicos: [String: Int] = [:]        // contagem de objetos únicos
     @Published var reconexoes = 0                      // saúde do stream
+    @Published var inalcancavel = false                // desistiu de reconectar
 
     let camera: Camera
     private let cameraService = CameraService()
@@ -36,13 +37,24 @@ class CameraCardViewModel: ObservableObject {
     init(camera: Camera) {
         self.camera = camera
         detector.confidenceThreshold = appConfig.confianca
-        detector.allowedClasses = appConfig.classes.map(Set.init)
+        detector.allowedClasses = appConfig.classesMonitoradas
         cameraService.$currentFrame.assign(to: &$frameImage)
         cameraService.$fps.assign(to: &$fps)
         cameraService.$isRunning.assign(to: &$isOnline)
         detector.$detectionCount.assign(to: &$detectionCount)
         detector.$lastDetections.assign(to: &$lastDetections)
         cameraService.$totalReconexoes.assign(to: &$reconexoes)
+        cameraService.$inalcancavel.assign(to: &$inalcancavel)
+
+        // Publica a saúde do stream para o Dashboard contar "Online" de verdade.
+        cameraService.$isRunning
+            .combineLatest(cameraService.$inalcancavel)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] rodando, inalc in
+                guard let self else { return }
+                CameraHealthRegistry.shared.atualizar(self.camera.id, online: rodando, inalcancavel: inalc)
+            }
+            .store(in: &bag)
 
         // detecção -> motor de alarmes (+ auto-snapshot de evidência ao disparar)
         detector.$detectionCount
@@ -92,7 +104,9 @@ class CameraCardViewModel: ObservableObject {
 
     func start() {
         guard !cameraService.isRunning else { return }
-        print("[CardVM] Starting \(camera.nome)")
+        // A extração de frames passa a seguir o "FPS Máximo" das Configurações;
+        // antes era fixa em 10 Hz e o ajuste não surtia efeito nenhum.
+        cameraService.fpsExtracao = Double(appConfig.fpsMax)
         switch camera.tipo {
         case .hls, .rtsp:
             cameraService.startHLSStream(url: camera.url)
@@ -122,6 +136,7 @@ class CameraCardViewModel: ObservableObject {
             RecordingService.shared.pararGravacao(camera.nome)
         }
         cameraService.stopCamera()
+        CameraHealthRegistry.shared.remover(camera.id)
     }
 
     /// Extrapola as caixas rastreadas a ~15 Hz (independente da taxa de inferência),
@@ -190,6 +205,6 @@ class CameraCardViewModel: ObservableObject {
                 self.isDetecting = false
             }
         }
-        RunLoop.main.add(detectTimer!, forMode: .default)
+        RunLoop.main.add(detectTimer!, forMode: .common)
     }
 }

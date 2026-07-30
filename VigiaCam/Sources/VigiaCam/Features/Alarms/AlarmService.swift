@@ -47,10 +47,16 @@ final class AlarmService: ObservableObject {
         let agora = Date()
         var disparados: [AlarmEvent] = []
         for regra in regras where regra.ativo && regra.casaCamera(nome: camera, categoria: categoria) {
-            if regra.classe != "qualquer" && !monitora(regra.classe) { continue }
-            let valor = regra.classe == "qualquer"
-                ? counts.filter { monitora($0.key) }.values.reduce(0, +)
-                : (counts[regra.classe] ?? 0)
+            // Só as classes monitoradas entram na conta — na regra de classe
+            // única e também no total.
+            let valor: Int
+            switch regra.alvo {
+            case .classe(let c):
+                guard monitora(c) else { continue }
+                valor = counts[c] ?? 0
+            case .qualquerObjeto:
+                valor = counts.filter { monitora($0.key) }.values.reduce(0, +)
+            }
             guard valor >= regra.limite else { continue }
             let chave = "\(regra.id)|\(camera)"
             if let ult = ultimoDisparo[chave], agora.timeIntervalSince(ult) < debounce { continue }
@@ -86,8 +92,7 @@ final class AlarmService: ObservableObject {
 
     @discardableResult
     private func disparar(regra: AlarmRule, camera: String, valor: Int) -> AlarmEvent {
-        let alvo = regra.classe == "qualquer" ? "objetos" : regra.classe
-        let msg = "\(regra.nome) — \(valor) \(alvo) em \(camera)"
+        let msg = "\(regra.nome) — \(valor) \(regra.alvo.descricao) em \(camera)"
         let ev = AlarmEvent(quando: Date(), regra: regra.nome, camera: camera,
                             mensagem: msg, severidade: regra.severidade)
         DispatchQueue.main.async {

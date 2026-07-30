@@ -2,23 +2,18 @@ import SwiftUI
 
 struct ConfigView: View {
     @ObservedObject var storage: StorageService
-    @ObservedObject var rbac: RBACService
     @State private var config: AppConfig = .default
     @State private var cameras: [Camera] = []
     @State private var showingAddCamera = false
-    @State private var newCameraNome = ""
-    @State private var newCameraURL = ""
-    @State private var newCameraCategoria = "Outras"
     @State private var selectedTab = 0
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Tab", selection: $selectedTab) { Text("Detecção").tag(0); Text("Câmeras").tag(1); Text("Usuários").tag(2) }
+            Picker("Tab", selection: $selectedTab) { Text("Detecção").tag(0); Text("Câmeras").tag(1) }
                 .pickerStyle(.segmented).padding(16)
             switch selectedTab {
             case 0: configTab
             case 1: camerasTab
-            case 2: usersTab
             default: configTab
             }
         }
@@ -32,7 +27,7 @@ struct ConfigView: View {
                 configRow(title: "FPS Máximo", value: "\(config.fpsMax)") { Stepper("", value: $config.fpsMax, in: 1...60).labelsHidden() }
                 configRow(title: "Confiança Mínima", value: String(format: "%.0f%%", config.confianca * 100)) { Slider(value: $config.confianca, in: 0.05...0.95, step: 0.05).tint(VigiaTheme.accent) }
                 configRow(title: "Resolução Inferência", value: "\(config.imgsz)px") { Stepper("", value: $config.imgsz, in: 96...1280, step: 32).labelsHidden() }
-                configRow(title: "Retenção (dias)", value: "\(config.retencapDias)") { Stepper("", value: $config.retencapDias, in: 1...365).labelsHidden() }
+                configRow(title: "Retenção (dias)", value: "\(config.retencaoDias)") { Stepper("", value: $config.retencaoDias, in: 1...365).labelsHidden() }
                 Button(action: { storage.salvarConfig(config.validated()) }) {
                     Text("Salvar").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
@@ -85,46 +80,15 @@ struct ConfigView: View {
     }
 
     private var addCameraSheet: some View {
-        VStack(spacing: 16) {
-            Text("Nova Câmera").font(.system(size: 16, weight: .bold)).foregroundColor(.white)
-            TextField("Nome", text: $newCameraNome).textFieldStyle(.plain).padding(12)
-                .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
-            TextField("URL (rtsp:// ou https://...)", text: $newCameraURL).textFieldStyle(.plain)
-                .padding(12).background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
-            TextField("Categoria", text: $newCameraCategoria).textFieldStyle(.plain).padding(12)
-                .background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
-            HStack {
-                Button("Cancelar") { showingAddCamera = false }.buttonStyle(.plain).padding(.vertical, 10)
-                Button(action: {
-                    let tipo: Camera.CameraType = newCameraURL.contains("rtsp") ? .rtsp : .hls
-                    cameras.append(Camera(nome: newCameraNome.isEmpty ? newCameraURL : newCameraNome, categoria: newCameraCategoria, tipo: tipo, url: newCameraURL))
-                    storage.salvarCameras(cameras)
-                    newCameraNome = ""; newCameraURL = ""; newCameraCategoria = "Outras"; showingAddCamera = false
-                }) {
-                    Text("Adicionar").font(.system(size: 14, weight: .bold)).foregroundColor(.black)
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(VigiaTheme.accentGradient).clipShape(RoundedRectangle(cornerRadius: 8))
-                }.buttonStyle(.plain)
+        AddCameraSheet(
+            existentes: cameras.map(\.id),
+            onCancel: { showingAddCamera = false },
+            onAdd: { nova in
+                cameras.append(nova)
+                storage.salvarCameras(cameras)
+                showingAddCamera = false
             }
-        }.padding(24).frame(width: 400).background(VigiaTheme.panel).clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(VigiaTheme.border, lineWidth: 1))
-        .padding(40)
+        )
     }
 
-    private var usersTab: some View {
-        List { ForEach(rbac.usuarios) { user in
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(user.usuario).font(.system(size: 13, weight: .bold)).foregroundColor(.white)
-                    Text(user.perfil.label).font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
-                }
-                Spacer()
-                Text(user.perfil.rawValue.uppercased()).font(.system(size: 10, weight: .bold))
-                    .foregroundColor(user.perfil == .admin ? VigiaTheme.danger : VigiaTheme.accent2)
-                    .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(user.perfil == .admin ? VigiaTheme.dangerGlow : VigiaTheme.accent2Glow)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            }.listRowBackground(VigiaTheme.card).listRowSeparator(.hidden)
-        }}.listStyle(.plain).scrollContentBackground(.hidden)
-    }
 }

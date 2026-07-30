@@ -31,7 +31,7 @@ final class BusinessMetricsService: ObservableObject {
             acc + m.unicos.filter { classes.isEmpty || classes.contains($0.key) }.values.reduce(0, +)
         }
     }
-    var pessoasUnicas: Int { somaUnicos(["person"]) }
+    var pessoasUnicas: Int { somaUnicos(["person", "Person"]) }
     var veiculosUnicos: Int { somaUnicos(["car", "truck", "bus", "motorcycle", "bicycle"]) }
     var totalEntradas: Int { porCamera.values.reduce(0) { $0 + $1.entradas } }
     var totalSaidas: Int { porCamera.values.reduce(0) { $0 + $1.saidas } }
@@ -52,6 +52,9 @@ final class BusinessMetricsService: ObservableObject {
         case "Caminhões": return "\(somaUnicos(["truck"]))"
         case "Aglomeração máx.", "Pico":
             return "\(porCamera.values.map { $0.unicos["person"] ?? 0 }.max() ?? 0)"
+        case "Sem capacete": return "\(somaUnicos(["NO-Hardhat"]))"
+        case "Sem colete": return "\(somaUnicos(["NO-Safety Vest"]))"
+        case "Capacetes OK": return "\(somaUnicos(["Hardhat"]))"
         default: return "—"
         }
     }

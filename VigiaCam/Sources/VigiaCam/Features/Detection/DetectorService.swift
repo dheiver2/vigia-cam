@@ -3,61 +3,95 @@ import CoreML
 import AppKit
 import SwiftUI
 
-/// Carrega e compila o modelo YOLOv8n UMA ÚNICA vez para todo o app.
+extension Notification.Name {
+    /// Postada quando `ModelProvider.tipoAtivo` muda — cada `DetectorService`
+    /// ativo escuta isso pra recarregar o modelo correto (ex.: trocar de
+    /// nicho geral para "Canteiro de Obras" troca o `.mlpackage` inteiro,
+    /// não só a lista de classes permitidas).
+    static let modeloAtivoMudou = Notification.Name("modeloAtivoMudou")
+}
+
+/// Qual `.mlpackage` está ativo para todo o app. Nichos com classes fora do
+/// vocabulário COCO (ex. EPI) precisam de um modelo diferente, não só de um
+/// filtro de classes sobre o modelo geral.
+enum TipoModelo: String, CaseIterable {
+    case geral   // yolov8n.mlpackage — 80 classes COCO
+    case ppe     // ppe.mlpackage — Hardhat/NO-Hardhat/Safety Vest/NO-Safety Vest/Person/...
+
+    var arquivo: String {
+        switch self {
+        case .geral: return "yolov8n"
+        case .ppe: return "ppe"
+        }
+    }
+}
+
+/// Carrega e compila o modelo YOLO ativo UMA ÚNICA vez por tipo, para todo o app.
 ///
 /// `.mlpackage` NÃO pode ser aberto direto por `MLModel(contentsOf:)` — o
 /// CoreML exige um `.mlmodelc` compilado. Aqui compilamos com
 /// `MLModel.compileModel(at:)` (resultado cacheado em Application Support) e
 /// reaproveitamos o mesmo `VNCoreMLModel` em todas as câmeras, em vez de pagar
-/// compilação + carga N vezes (uma por card).
+/// compilação + carga N vezes (uma por card). O cache é mantido por `TipoModelo`
+/// para não recompilar ao alternar entre nichos que já foram carregados antes.
 enum ModelProvider {
     enum Estado { case ok(VNCoreMLModel), semArquivo, erro(String) }
 
     private static let lock = NSLock()
-    private static var cache: Estado?
+    private static var cache: [TipoModelo: Estado] = [:]
+
+    /// Modelo ativo no app inteiro. Trocar isto dispara `.modeloAtivoMudou`
+    /// para que cada `DetectorService` (um por card de câmera) recarregue.
+    static var tipoAtivo: TipoModelo = .geral {
+        didSet {
+            guard oldValue != tipoAtivo else { return }
+            NotificationCenter.default.post(name: .modeloAtivoMudou, object: nil)
+        }
+    }
 
     /// Resolução de entrada REAL do modelo, lida do próprio `.mlmodel` ao carregar
     /// (em vez de assumir 640 fixo no parsing do output — se o modelo mudar de
     /// resolução um dia, o parsing não quebra silenciosamente).
     private(set) static var inputSize: CGFloat = 640
 
-    static func shared() -> Estado {
+    static func shared(tipo: TipoModelo = tipoAtivo) -> Estado {
         lock.lock(); defer { lock.unlock() }
-        if let cache { return cache }
-        let estado = carregar()
-        cache = estado
+        if let estado = cache[tipo] { return estado }
+        let estado = carregar(tipo: tipo)
+        cache[tipo] = estado
         return estado
     }
 
-    private static func candidatos() -> [URL] {
+    private static func candidatos(tipo: TipoModelo) -> [URL] {
         var urls: [URL] = []
-        if let u = Bundle.main.url(forResource: "yolov8n", withExtension: "mlpackage") {
+        let nome = tipo.arquivo
+        if let u = Bundle.main.url(forResource: nome, withExtension: "mlpackage") {
             urls.append(u)
         }
         let bp = Bundle.main.bundlePath
-        for p in ["/Contents/Resources/yolov8n.mlpackage",
-                  "/Contents/Resources/VigiaCam_VigiaCam.bundle/Contents/Resources/yolov8n.mlpackage",
-                  "/Contents/Resources/VigiaCam_VigiaCam.bundle/yolov8n.mlpackage"] {
+        for p in ["/Contents/Resources/\(nome).mlpackage",
+                  "/Contents/Resources/VigiaCam_VigiaCam.bundle/Contents/Resources/\(nome).mlpackage",
+                  "/Contents/Resources/VigiaCam_VigiaCam.bundle/\(nome).mlpackage"] {
             urls.append(URL(fileURLWithPath: bp + p))
         }
         return urls
     }
 
-    private static func compiladoCache(para origem: URL) -> URL {
+    private static func compiladoCache(para origem: URL, tipo: TipoModelo) -> URL {
         let sup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("VigiaCam", isDirectory: true)
         try? FileManager.default.createDirectory(at: sup, withIntermediateDirectories: true)
-        return sup.appendingPathComponent("yolov8n.mlmodelc", isDirectory: true)
+        return sup.appendingPathComponent("\(tipo.arquivo).mlmodelc", isDirectory: true)
     }
 
-    private static func carregar() -> Estado {
-        guard let origem = candidatos().first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
-            print("[Detector] modelo não encontrado no bundle")
+    private static func carregar(tipo: TipoModelo) -> Estado {
+        guard let origem = candidatos(tipo: tipo).first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+            print("[Detector] modelo \(tipo.arquivo) não encontrado no bundle")
             return .semArquivo
         }
         do {
             // reaproveita o .mlmodelc já compilado se existir (compilar é caro)
-            let cacheURL = compiladoCache(para: origem)
+            let cacheURL = compiladoCache(para: origem, tipo: tipo)
             let compiladoURL: URL
             if FileManager.default.fileExists(atPath: cacheURL.path) {
                 compiladoURL = cacheURL
@@ -76,7 +110,7 @@ enum ModelProvider {
                 print("[Detector] resolução de entrada do modelo: \(Int(constraint.pixelsWide))x\(Int(constraint.pixelsHigh))")
             }
             let vn = try VNCoreMLModel(for: ml)
-            print("[Detector] YOLOv8n compilado e carregado")
+            print("[Detector] modelo \(tipo.arquivo) compilado e carregado")
             return .ok(vn)
         } catch {
             print("[Detector] falha ao compilar/carregar: \(error.localizedDescription)")
@@ -93,9 +127,20 @@ final class DetectorService: ObservableObject {
 
     private var vnModel: VNCoreMLModel?
     var confidenceThreshold: Float = 0.25
-    /// Índices COCO permitidos (`AppConfig.classes`); `nil` = todas as classes.
-    var allowedClasses: Set<Int>?
+    /// Classes permitidas por NOME (`AppConfig.classesMonitoradas`); `nil` =
+    /// todas. Era um `Set<Int>` de índices COCO, que apontava para as classes
+    /// erradas assim que o modelo ativo mudava (o de EPI tem outro vocabulário).
+    var allowedClasses: Set<String>?
+    /// Limiares por classe (ex.: classes com mais falso-positivo podem exigir
+    /// confiança maior). `nil`/ausente na classe = usa `confidenceThreshold`.
+    var perClassThresholds: [String: Float] = [:]
     private let iouThreshold: Float = 0.45
+    /// Threshold usado só para JUNTAR candidatos antes da NMS/fusão — mais
+    /// baixo que `confidenceThreshold` para não descartar cedo demais uma
+    /// detecção fraca que a fusão com vizinhos ou o tracker ainda podem
+    /// confirmar. O corte "de verdade" continua sendo `confidenceThreshold`,
+    /// aplicado depois da fusão.
+    private var limiarColeta: Float { max(0.10, confidenceThreshold - 0.15) }
     private let queue = DispatchQueue(label: "detector")
 
     /// Limita quantas inferências CoreML rodam ao mesmo tempo em TODAS as câmeras.
@@ -105,20 +150,20 @@ final class DetectorService: ObservableObject {
         value: max(2, ProcessInfo.processInfo.activeProcessorCount / 2)
     )
 
-    static let cocoLabels = [
-        "person","bicycle","car","motorcycle","airplane","bus","train","truck",
-        "boat","traffic light","fire hydrant","stop sign","parking meter","bench",
-        "bird","cat","dog","horse","sheep","cow","elephant","bear","zebra",
-        "giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee",
-        "skis","snowboard","sports ball","kite","baseball bat","baseball glove",
-        "skateboard","surfboard","tennis racket","bottle","wine glass","cup",
-        "fork","knife","spoon","bowl","banana","apple","sandwich","orange",
-        "broccoli","carrot","hot dog","pizza","donut","cake","chair","couch",
-        "potted plant","bed","dining table","toilet","tv","laptop","mouse",
-        "remote","keyboard","cell phone","microwave","oven","toaster","sink",
-        "refrigerator","book","clock","vase","scissors","teddy bear",
-        "hair drier","toothbrush"
-    ]
+    /// Vocabulário agora vive em `ClassesModelo.swift` (dado de domínio puro,
+    /// testável sem CoreML). Mantido como alias pelos pontos de uso.
+    static let cocoLabels = ClassesCOCO.nomes
+
+    /// Classes do modelo de EPI (`ppe.mlpackage`), na ordem exata do índice de
+    /// saída do modelo (0..9) — confirmada via `model.names` no export ultralytics.
+    static let ppeLabels = ClassesEPI.nomes
+
+    /// Labels do modelo ATUALMENTE ativo (`ModelProvider.tipoAtivo`) — não é
+    /// mais sempre `cocoLabels`, porque nichos como Canteiro de Obras usam um
+    /// `.mlpackage` diferente com vocabulário próprio.
+    private var labels: [String] {
+        ModelProvider.tipoAtivo == .ppe ? Self.ppeLabels : Self.cocoLabels
+    }
 
     private static let palette: [Color] = [
         .red, .blue, .green, .orange, .purple, .pink, .yellow, .teal, .indigo,
@@ -129,12 +174,28 @@ final class DetectorService: ObservableObject {
         palette[abs(label.hashValue) % palette.count]
     }
 
-    init() { loadModel() }
+    init() {
+        loadModel()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(modeloMudou),
+            name: .modeloAtivoMudou, object: nil
+        )
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func modeloMudou() {
+        vnModel = nil
+        detectionCount = [:]
+        lastDetections = []
+        loadModel()
+    }
 
     private func loadModel() {
+        let tipo = ModelProvider.tipoAtivo
         queue.async { [weak self] in
             guard let self else { return }
-            switch ModelProvider.shared() {
+            switch ModelProvider.shared(tipo: tipo) {
             case .ok(let vn):
                 self.vnModel = vn
                 DispatchQueue.main.async { self.isLoaded = true; self.indisponivel = false }
@@ -151,7 +212,13 @@ final class DetectorService: ObservableObject {
 
         // Use VNCoreMLRequest — it handles imageType input automatically
         let request = VNCoreMLRequest(model: vnModel)
-        request.imageCropAndScaleOption = .scaleFill
+        // .scaleFill esticava a imagem pro quadrado do modelo (ex. 640×640),
+        // distorcendo o aspect ratio de frames RTSP 16:9 — o objeto ficava
+        // "achatado" e o YOLO (treinado com letterbox) perdia precisão de
+        // classe e de caixa. .scaleFit + padding (letterbox) preserva a
+        // proporção; a compensação do padding é refeita manualmente em
+        // `parseYOLOOutput` a partir do tamanho real do frame.
+        request.imageCropAndScaleOption = .scaleFit
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         Self.inferenceSemaphore.wait()
@@ -168,7 +235,7 @@ final class DetectorService: ObservableObject {
             print("[Detector] Got \(objectResults.count) VNRecognizedObjectObservation")
             let dets = objectResults.compactMap { obs -> Detection? in
                 guard let label = obs.labels.first?.identifier, obs.labels.first!.confidence >= confidenceThreshold else { return nil }
-                if let allowed = allowedClasses, let idx = Self.cocoLabels.firstIndex(of: label), !allowed.contains(idx) { return nil }
+                if let allowed = allowedClasses, !allowed.contains(label) { return nil }
                 return Detection(label: label, confidence: obs.labels.first!.confidence, boundingBox: obs.boundingBox)
             }
             updateUI(dets)
@@ -184,7 +251,7 @@ final class DetectorService: ObservableObject {
         for feat in featureResults {
             if let mlArray = feat.featureValue.multiArrayValue {
                 print("[Detector] Feature '\(feat.featureName)' shape: \(mlArray.shape)")
-                let dets = parseYOLOOutput(mlArray)
+                let dets = parseYOLOOutput(mlArray, origW: CGFloat(cgImage.width), origH: CGFloat(cgImage.height))
                 updateUI(dets)
                 return dets
             }
@@ -194,27 +261,45 @@ final class DetectorService: ObservableObject {
         return []
     }
 
-    private func parseYOLOOutput(_ mlArray: MLMultiArray) -> [Detection] {
+    private func parseYOLOOutput(_ mlArray: MLMultiArray, origW: CGFloat, origH: CGFloat) -> [Detection] {
         let ptr = mlArray.dataPointer.bindMemory(to: Float32.self, capacity: mlArray.count)
         let count = mlArray.count
-        // YOLOv8: output [1, 84, 8400] or [84, 8400]
-        // Layout: 84 rows × 8400 cols
+        // YOLOv8: output [1, 4+numClasses, numDetections] ou [4+numClasses, numDetections]
+        // Layout: (4+numClasses) rows × numDetections cols
         // Rows 0-3: cx, cy, w, h
-        // Rows 4-83: class scores
-        let numDetections = count / 84
+        // Rows 4..(4+numClasses-1): class scores
+        // numClasses varia por modelo ativo (80 no geral, 10 no de EPI) — não é
+        // mais fixo em 84/80, senão o parsing quebra ao trocar de `.mlpackage`.
+        let numClasses = labels.count
+        let numDetections = count / (4 + numClasses)
         guard numDetections > 0 else { return [] }
 
+        // Compensação do letterbox (.scaleFit): o frame original (origW×origH,
+        // geralmente 16:9) foi redimensionado preservando proporção e
+        // centralizado dentro do quadrado N×N do modelo, sobrando faixas de
+        // padding. Sem desfazer isso aqui, os boxes saem deslocados/menores
+        // que o objeto real assim que a câmera não é quadrada.
+        let n = CGFloat(ModelProvider.inputSize)
+        let escala = min(n / max(origW, 1), n / max(origH, 1))
+        let novaW = origW * escala, novaH = origH * escala
+        let padX = (n - novaW) / 2, padY = (n - novaH) / 2
+
+        // Coleta com limiar mais permissivo que o de exibição: a fusão de
+        // caixas (WBF) e o tracker (hits consecutivos) filtram o ruído extra
+        // depois, então baixar aqui só aumenta o recall de objetos fracos que
+        // seriam perdidos cedo demais.
+        let limiar = limiarColeta
         var candidates: [(label: String, confidence: Float, box: CGRect)] = []
 
         for i in 0..<numDetections {
-            let cx = ptr[0 * numDetections + i]
-            let cy = ptr[1 * numDetections + i]
-            let w  = ptr[2 * numDetections + i]
-            let h  = ptr[3 * numDetections + i]
+            let cxM = CGFloat(ptr[0 * numDetections + i])
+            let cyM = CGFloat(ptr[1 * numDetections + i])
+            let wM  = CGFloat(ptr[2 * numDetections + i])
+            let hM  = CGFloat(ptr[3 * numDetections + i])
 
             var bestScore: Float = 0
             var bestClass = -1
-            for c in 0..<80 {
+            for c in 0..<numClasses {
                 let score = ptr[(4 + c) * numDetections + i]
                 if score > bestScore {
                     bestScore = score
@@ -222,24 +307,28 @@ final class DetectorService: ObservableObject {
                 }
             }
 
-            if bestScore < confidenceThreshold || bestClass < 0 { continue }
-            if let allowed = allowedClasses, !allowed.contains(bestClass) { continue }
+            if bestClass < 0 || bestScore < limiar { continue }
+            let nomeClasse = bestClass < labels.count ? labels[bestClass] : "class_\(bestClass)"
+            if let allowed = allowedClasses, !allowed.contains(nomeClasse) { continue }
 
-            // Convenção Vision: origem no canto INFERIOR-esquerdo, normalizada.
-            // O YOLO devolve cx,cy do canto superior-esquerdo (0..N), onde N é a
-            // resolução de entrada REAL do modelo (lida em ModelProvider, não mais
-            // hardcoded) — o Y precisa ser espelhado (N - baixo) p/ casar com o overlay.
-            let n = Float(ModelProvider.inputSize)
-            let x1 = (cx - w / 2) / n
-            let y1 = (n - (cy + h / 2)) / n
-            let bw = w / n
-            let bh = h / n
+            // Remove o padding do letterbox e volta pro espaço de pixels do
+            // frame original antes de normalizar.
+            let cxOrig = (cxM - padX) / escala
+            let cyOrig = (cyM - padY) / escala
+            let wOrig  = wM / escala
+            let hOrig  = hM / escala
+
+            // Convenção Vision: origem no canto INFERIOR-esquerdo, normalizada
+            // pelas dimensões REAIS do frame (não mais pela resolução do modelo).
+            let x1 = (cxOrig - wOrig / 2) / origW
+            let y1 = (origH - (cyOrig + hOrig / 2)) / origH
+            let bw = wOrig / origW
+            let bh = hOrig / origH
 
             guard bw > 0, bh > 0, bw < 1, bh < 1 else { continue }
 
-            let label = bestClass < Self.cocoLabels.count ? Self.cocoLabels[bestClass] : "class_\(bestClass)"
-            candidates.append((label: label, confidence: bestScore,
-                box: CGRect(x: CGFloat(x1), y: CGFloat(y1), width: CGFloat(bw), height: CGFloat(bh))))
+            candidates.append((label: nomeClasse, confidence: bestScore,
+                box: CGRect(x: x1, y: y1, width: bw, height: bh)))
         }
 
         print("[Detector] Raw candidates: \(candidates.count)")
@@ -257,34 +346,82 @@ final class DetectorService: ObservableObject {
         }
     }
 
+    /// Limiar de IoU adaptado ao tamanho da caixa: objetos grandes (câmera
+    /// perto/veículos) toleram mais sobreposição legítima entre duas detecções
+    /// distintas do que objetos pequenos, onde a mesma folga já indica
+    /// duplicata. Fixo em 0.45 para tudo cortava caixas boas de objetos grandes
+    /// e deixava passar duplicatas de objetos pequenos.
+    private func iouAdaptativo(_ a: CGRect, _ b: CGRect) -> Float {
+        let area = Float(max(a.width * a.height, b.width * b.height))
+        return Float(iouThreshold) + min(0.15, area * 0.3)
+    }
+
+    /// Soft-NMS + fusão ponderada de caixas (WBF-lite), no lugar da NMS "dura"
+    /// original: em vez de simplesmente descartar toda detecção sobreposta à
+    /// de maior confiança, (1) o score da sobreposta é atenuado por um decaimento
+    /// gaussiano proporcional ao IoU — só cai fora se ficar realmente redundante —
+    /// e (2) a caixa final é a MÉDIA ponderada por confiança de todas as caixas
+    /// do cluster, não apenas a de maior score isolada, o que melhora a
+    /// localização (menos "caixa levemente errada porque a de maior confiança
+    /// não era a mais bem enquadrada").
     private func nms(_ candidates: [(label: String, confidence: Float, box: CGRect)]) -> [Detection] {
-        let sorted = candidates.sorted { $0.confidence > $1.confidence }
-        var keep: [Detection] = []
-        var suppressed = [Bool](repeating: false, count: sorted.count)
+        var pool = candidates
+        var resultado: [(label: String, confidence: Float, box: CGRect)] = []
 
-        for i in 0..<sorted.count {
-            if suppressed[i] { continue }
-            let a = sorted[i]
-            keep.append(Detection(label: a.label, confidence: a.confidence, boundingBox: a.box))
+        while !pool.isEmpty {
+            pool.sort { $0.confidence > $1.confidence }
+            let ancora = pool.removeFirst()
+            var cluster: [(label: String, confidence: Float, box: CGRect)] = [ancora]
+            var restante: [(label: String, confidence: Float, box: CGRect)] = []
 
-            for j in (i+1)..<sorted.count {
-                if suppressed[j] { continue }
-                let b = sorted[j]
-                guard a.label == b.label else { continue }
+            for cand in pool {
+                guard cand.label == ancora.label else { restante.append(cand); continue }
 
-                let ix = max(a.box.minX, b.box.minX)
-                let iy = max(a.box.minY, b.box.minY)
-                let iw = max(CGFloat(0), min(a.box.maxX, b.box.maxX) - ix)
-                let ih = max(CGFloat(0), min(a.box.maxY, b.box.maxY) - iy)
+                let ix = max(ancora.box.minX, cand.box.minX)
+                let iy = max(ancora.box.minY, cand.box.minY)
+                let iw = max(CGFloat(0), min(ancora.box.maxX, cand.box.maxX) - ix)
+                let ih = max(CGFloat(0), min(ancora.box.maxY, cand.box.maxY) - iy)
                 let inter = iw * ih
-                let union = a.box.width * a.box.height + b.box.width * b.box.height - inter
+                let union = ancora.box.width * ancora.box.height + cand.box.width * cand.box.height - inter
+                let iou = union > 0 ? Float(inter / union) : 0
 
-                if union > 0 && inter / union > CGFloat(iouThreshold) {
-                    suppressed[j] = true
+                let limiar = iouAdaptativo(ancora.box, cand.box)
+                if iou <= 0.05 {
+                    restante.append(cand)
+                } else if iou > limiar {
+                    cluster.append(cand)   // funde: é a mesma detecção duplicada
+                } else {
+                    // decaimento gaussiano (soft-NMS): não descarta de graça,
+                    // só reduz a confiança proporcionalmente à sobreposição.
+                    let sigma: Float = 0.5
+                    let atenuado = cand.confidence * exp(-(iou * iou) / sigma)
+                    if atenuado >= limiarColeta {
+                        restante.append((label: cand.label, confidence: atenuado, box: cand.box))
+                    }
                 }
             }
+
+            let pesoTotal = cluster.reduce(Float(0)) { $0 + $1.confidence }
+            let boxFundida: CGRect
+            if pesoTotal > 0 {
+                let x = cluster.reduce(CGFloat(0)) { $0 + $1.box.minX * CGFloat($1.confidence) } / CGFloat(pesoTotal)
+                let y = cluster.reduce(CGFloat(0)) { $0 + $1.box.minY * CGFloat($1.confidence) } / CGFloat(pesoTotal)
+                let w = cluster.reduce(CGFloat(0)) { $0 + $1.box.width * CGFloat($1.confidence) } / CGFloat(pesoTotal)
+                let h = cluster.reduce(CGFloat(0)) { $0 + $1.box.height * CGFloat($1.confidence) } / CGFloat(pesoTotal)
+                boxFundida = CGRect(x: x, y: y, width: w, height: h)
+            } else {
+                boxFundida = ancora.box
+            }
+            resultado.append((label: ancora.label, confidence: cluster.map(\.confidence).max() ?? ancora.confidence, box: boxFundida))
+            pool = restante
         }
-        return keep
+
+        // Corte final "de exibição": a coleta e o soft-NMS trabalharam com um
+        // limiar mais baixo (`limiarColeta`) de propósito; só agora aplicamos
+        // o threshold real (global ou por classe).
+        return resultado
+            .filter { $0.confidence >= (perClassThresholds[$0.label] ?? confidenceThreshold) }
+            .map { Detection(label: $0.label, confidence: $0.confidence, boundingBox: $0.box) }
     }
 }
 

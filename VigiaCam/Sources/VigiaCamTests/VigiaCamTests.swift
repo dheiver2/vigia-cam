@@ -26,42 +26,6 @@ final class VigiaCamTests: XCTestCase {
         XCTAssertEqual(h1.count, 64) // hex string of 32 bytes
     }
 
-    // MARK: - RBAC Tests
-
-    func testDefaultAdminCreated() {
-        let rbac = RBACService()
-        XCTAssertFalse(rbac.usuarios.isEmpty)
-        XCTAssertEqual(rbac.usuarios.first?.perfil, .admin)
-    }
-
-    func testLoginSuccess() {
-        let rbac = RBACService()
-        let user = rbac.login(usuario: "admin", senha: "admin")
-        XCTAssertNotNil(user)
-        XCTAssertEqual(user?.perfil, .admin)
-    }
-
-    func testLoginFailure() {
-        let rbac = RBACService()
-        let user = rbac.login(usuario: "admin", senha: "wrong")
-        XCTAssertNil(user)
-    }
-
-    func testAddAndRemoveUser() throws {
-        let rbac = RBACService()
-        try rbac.adicionar(usuario: "operador1", senha: "pass123", perfil: .operador)
-        XCTAssertEqual(rbac.usuarios.count, 2)
-        try rbac.remover(usuario: "operador1")
-        XCTAssertEqual(rbac.usuarios.count, 1)
-    }
-
-    func testCannotRemoveLastAdmin() {
-        let rbac = RBACService()
-        XCTAssertThrowsError(try rbac.remover(usuario: "admin")) { error in
-            XCTAssertEqual(error as? RBACError, .naoPodeRemoverUltimoAdmin)
-        }
-    }
-
     // MARK: - AppConfig Tests
 
     func testConfigValidation() {

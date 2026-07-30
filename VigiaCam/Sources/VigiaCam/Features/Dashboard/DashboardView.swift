@@ -3,20 +3,18 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var storage: StorageService
     @ObservedObject var eventService: EventService
-    @ObservedObject var rbac: RBACService
     @State private var totalCameras = 0
-    @State private var totalUsuarios = 0
     @State private var totalEventos = 0
-    @State private var onlineCameras = 0
+    @ObservedObject private var saude = CameraHealthRegistry.shared
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                     KPICardView(title: "Câmeras", value: "\(totalCameras)", icon: "video", color: VigiaTheme.accent)
-                    KPICardView(title: "Online", value: "\(onlineCameras)", icon: "wifi", color: VigiaTheme.ok)
+                    KPICardView(title: "Online", value: "\(saude.online.count)", icon: "wifi",
+                                color: saude.online.isEmpty ? VigiaTheme.danger : VigiaTheme.ok)
                     KPICardView(title: "Eventos Hoje", value: "\(totalEventos)", icon: "bolt.fill", color: VigiaTheme.accent2)
-                    KPICardView(title: "Usuários", value: "\(totalUsuarios)", icon: "person.2.fill", color: VigiaTheme.danger)
                 }.padding(16)
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Eventos Recentes").font(.system(size: 16, weight: .bold)).foregroundColor(.white).padding(.horizontal, 16)
@@ -43,13 +41,12 @@ struct DashboardView: View {
         }
         .background(VigiaTheme.bg)
         .onAppear { carregarDados() }
+        .onChange(of: storage.camerasVersao) { carregarDados() }
     }
 
     private func carregarDados() {
         totalCameras = storage.carregarCameras().count
-        totalUsuarios = rbac.usuarios.count
         totalEventos = eventService.eventos.count
-        onlineCameras = totalCameras
         eventService.carregarEventos(dias: 1)
     }
 }

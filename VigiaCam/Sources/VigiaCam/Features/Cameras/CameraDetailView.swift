@@ -178,6 +178,13 @@ struct CameraDetailView: View {
         }
         .onAppear { vm.start() }
         .onDisappear { vm.stop() }
+        // Esc fecha o detalhe. Sem isto o único jeito de sair era acertar a
+        // setinha no canto, e a tela ficava presa sobre o videowall.
+        .background(
+            Button("") { dismiss() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .opacity(0).frame(width: 0, height: 0)
+        )
     }
 
     // MARK: - Analítico de negócio (linha + zonas)

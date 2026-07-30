@@ -12,7 +12,14 @@ let package = Package(
             name: "VigiaCam",
             path: "Sources/VigiaCam",
             resources: [
-                .process("Resources")
+                // .copy (não .process): dois .mlpackage têm arquivos internos
+                // com o mesmo nome (Data/com.apple.CoreML/model.mlmodel) — o
+                // processamento de recursos do SwiftPM tenta compilar/mesclar
+                // cada .mlmodel individualmente e colide ("multiple resources
+                // named 'model.mlmodel'"). .copy trata cada .mlpackage como
+                // pasta opaca, sem tentar compilar nada (o app já compila os
+                // dois manualmente em runtime via ModelProvider).
+                .copy("Resources")
             ]
         ),
         .testTarget(

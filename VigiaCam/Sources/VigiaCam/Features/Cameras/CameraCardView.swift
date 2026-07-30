@@ -56,10 +56,23 @@ struct CameraCardView: View {
                                 .frame(maxWidth: .infinity, maxHeight: videoHeight == nil ? .infinity : nil)
                                 .overlay(
                                     VStack(spacing: 8) {
-                                        ProgressView().tint(VigiaTheme.accent)
-                                        Text(vm.isOnline ? "Conectando..." : "Reconectando...")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(VigiaTheme.muted)
+                                        // Um host fora do ar mostrava "Reconectando…" para
+                                        // sempre; agora o card assume a falha depois das
+                                        // tentativas com backoff.
+                                        if vm.inalcancavel {
+                                            Image(systemName: "wifi.slash")
+                                                .font(.system(size: 20)).foregroundColor(VigiaTheme.danger)
+                                            Text("Sem resposta do servidor")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(VigiaTheme.danger)
+                                            Text("\(vm.reconexoes) tentativas")
+                                                .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
+                                        } else {
+                                            ProgressView().tint(VigiaTheme.accent)
+                                            Text(vm.isOnline ? "Conectando..." : "Reconectando...")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(VigiaTheme.muted)
+                                        }
                                     }
                                 )
                         }

@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 echo "🔨 Building VigiaCam..."
 cd VigiaCam
-swift build -c release 2>&1 | tail -3
+swift build -c release 2>&1 | tail -30
 cd ..
 
 echo "📦 Creating .app bundle..."
@@ -16,6 +17,11 @@ cp VigiaCam/.build/release/VigiaCam VigiaCam.app/Contents/MacOS/VigiaCam
 if [ -d "VigiaCam/Sources/VigiaCam/Resources/yolov8n.mlpackage" ]; then
     cp -R VigiaCam/Sources/VigiaCam/Resources/yolov8n.mlpackage VigiaCam.app/Contents/Resources/
     echo "📦 Copied yolov8n.mlpackage to bundle"
+fi
+
+if [ -d "VigiaCam/Sources/VigiaCam/Resources/ppe.mlpackage" ]; then
+    cp -R VigiaCam/Sources/VigiaCam/Resources/ppe.mlpackage VigiaCam.app/Contents/Resources/
+    echo "📦 Copied ppe.mlpackage to bundle"
 fi
 
 # Copy SPM resource bundle if exists

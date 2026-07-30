@@ -6,12 +6,19 @@ struct AlarmsView: View {
     let categorias: [String]
 
     @State private var nome = ""
-    @State private var classe = "person"
+    @State private var alvo: AlvoAlarme = .classe("person")
     @State private var limite = 5
-    @State private var escopo = "Todas"
+    @State private var escopo: EscopoAlarme = .todas
     @State private var severidade: Severidade = .aviso
 
-    private let classes = ["person", "car", "truck", "bus", "motorcycle", "bicycle", "qualquer"]
+    private let alvos: [AlvoAlarme] = [
+        .classe("person"), .classe("car"), .classe("truck"), .classe("bus"),
+        .classe("motorcycle"), .classe("bicycle"), .qualquerObjeto
+    ]
+
+    /// O seletor listava categorias sob o rótulo "Câmera" e gravava só o texto,
+    /// num campo que casava por nome OU categoria. Agora cada opção diz o que é.
+    private var escopos: [EscopoAlarme] { [.todas] + categorias.map { EscopoAlarme.categoria($0) } }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -87,7 +94,7 @@ struct AlarmsView: View {
                             }.buttonStyle(.plain)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(r.nome).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
-                                Text("\(r.classe) ≥ \(r.limite) · \(r.escopo ?? "Todas")")
+                                Text("\(r.alvo.descricao) ≥ \(r.limite) · \(r.escopo.descricao)")
                                     .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
                             }
                             Spacer()
@@ -107,21 +114,23 @@ struct AlarmsView: View {
                 Text("Nova regra").font(.system(size: 12, weight: .bold)).foregroundColor(VigiaTheme.accent)
                 TextField("Nome da regra", text: $nome).textFieldStyle(.roundedBorder)
                 HStack {
-                    Picker("Classe", selection: $classe) { ForEach(classes, id: \.self) { Text($0) } }.frame(width: 130)
+                    Picker("Classe", selection: $alvo) {
+                        ForEach(alvos, id: \.self) { Text($0.descricao).tag($0) }
+                    }.frame(width: 130)
                     Stepper("≥ \(limite)", value: $limite, in: 1...50).font(.system(size: 11))
                 }
                 HStack {
-                    Picker("Câmera", selection: $escopo) {
-                        ForEach(["Todas"] + categorias, id: \.self) { Text($0) }
+                    Picker("Escopo", selection: $escopo) {
+                        ForEach(escopos, id: \.self) { Text($0.descricao).tag($0) }
                     }
                     Picker("Sev.", selection: $severidade) {
                         ForEach(Severidade.allCases) { Text($0.label).tag($0) }
                     }.frame(width: 110)
                 }
                 Button {
-                    let r = AlarmRule(nome: nome.isEmpty ? "\(classe) ≥ \(limite)" : nome,
-                                      classe: classe, limite: limite,
-                                      escopo: escopo == "Todas" ? nil : escopo, severidade: severidade)
+                    let r = AlarmRule(nome: nome.isEmpty ? "\(alvo.descricao) ≥ \(limite)" : nome,
+                                      alvo: alvo, limite: limite,
+                                      escopo: escopo, severidade: severidade)
                     alarms.adicionar(r); nome = ""
                 } label: {
                     Text("Adicionar regra").frame(maxWidth: .infinity)

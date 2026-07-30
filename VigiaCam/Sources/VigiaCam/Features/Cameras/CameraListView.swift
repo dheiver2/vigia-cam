@@ -46,5 +46,6 @@ struct CameraListView: View {
         }
         .background(VigiaTheme.bg)
         .onAppear { cameras = storage.carregarCameras() }
+        .onChange(of: storage.camerasVersao) { cameras = storage.carregarCameras() }
     }
 }

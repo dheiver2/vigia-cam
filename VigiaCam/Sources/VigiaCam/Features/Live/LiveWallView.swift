@@ -5,8 +5,15 @@ import AppKit
 /// (rodízio de páginas) e tela cheia.
 struct LiveWallView: View {
     @ObservedObject var storage: StorageService
+    @ObservedObject private var filtroStore = CameraFilterStore.shared
     @State private var cameras: [Camera] = []
-    @State private var categoria = "Todas"
+    /// Espelha `CameraFilterStore.shared.categoria` — computado (não `@State`)
+    /// para que a aba Negócio consiga trocar o filtro ao aplicar um nicho,
+    /// mesmo com esta view recriada a cada troca de aba.
+    private var categoria: String {
+        get { filtroStore.categoria }
+        nonmutating set { filtroStore.categoria = newValue }
+    }
     @State private var layout = 4                 // tiles por página (1,4,9,16)
     @State private var pagina = 0
     @State private var ronda = false
@@ -50,6 +57,7 @@ struct LiveWallView: View {
         .background(VigiaTheme.bg)
         .background(atalhosTeclado)
         .onAppear { cameras = storage.carregarCameras(); salvos = carregarSalvos() }
+        .onChange(of: storage.camerasVersao) { cameras = storage.carregarCameras() }
         .onReceive(rondaTimer) { _ in avancarRonda() }
     }
 
@@ -108,17 +116,17 @@ struct LiveWallView: View {
             Divider().frame(height: 20)
 
             // categoria
-            Picker("", selection: $categoria) {
+            Picker("", selection: $filtroStore.categoria) {
                 ForEach(categorias, id: \.self) { Text($0).tag($0) }
             }
             .labelsHidden().frame(width: 180)
-            .onChange(of: categoria) { _ in pagina = 0 }
+            .onChange(of: categoria) { pagina = 0 }
 
             TextField("Buscar…", text: $buscando)
                 .textFieldStyle(.plain).frame(width: 120)
                 .padding(6).background(VigiaTheme.card)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(VigiaTheme.border))
-                .onChange(of: buscando) { _ in pagina = 0 }
+                .onChange(of: buscando) { pagina = 0 }
 
             Spacer()
 
