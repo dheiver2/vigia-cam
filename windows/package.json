@@ -1,0 +1,30 @@
+{
+  "name": "vigiacam-win",
+  "productName": "VigiaCam",
+  "version": "2.1.0",
+  "description": "VIGIA·CAM — monitoramento de vídeo com IA 100% local (porte Windows)",
+  "main": "main.js",
+  "author": "Dheiver Santos",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.vigiacam.app",
+    "productName": "VigiaCam",
+    "files": ["main.js", "app/**", "node_modules/hls.js/dist/hls.min.js", "node_modules/onnxruntime-web/dist/**"],
+    "asarUnpack": ["node_modules/onnxruntime-web/dist/**", "app/yolov8n.onnx"],
+    "win": { "target": ["zip"] },
+    "directories": { "output": "dist" }
+  },
+  "devDependencies": {
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "hls.js": "^1.6.16",
+    "onnxruntime-web": "^1.27.0"
+  }
+}
