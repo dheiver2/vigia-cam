@@ -84,3 +84,12 @@ select, input[type="text"] { background: var(--card); color: #fff; border: 1px s
 .cfg-row .cfg-value { color: var(--muted); font-size: 12px; margin-right: 12px; }
 input[type="range"] { accent-color: var(--accent); }
 .form-grid { display: grid; gap: 8px; max-width: 480px; margin-top: 12px; }
+
+/* Ações por câmera (snapshot/gravação) */
+.cam-actions { position: absolute; bottom: 22px; right: 8px; display: none; gap: 6px; z-index: 4; }
+.cam-card:hover .cam-actions { display: flex; }
+.act-btn { background: rgba(0,0,0,0.65); border: 1px solid var(--border); color: #fff; font-size: 13px; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+.act-btn:hover { border-color: var(--accent); }
+.act-btn.rec-on { background: var(--danger); border-color: var(--danger); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: 0.55; } }
+.badge.ok { background: rgba(52,199,89,0.15); color: var(--ok); }
