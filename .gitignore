@@ -6,3 +6,4 @@ VigiaCam/.swiftpm/
 DerivedData/
 build/
 *.pt
+yolov8n.onnx
