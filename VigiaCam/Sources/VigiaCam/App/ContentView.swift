@@ -4,6 +4,7 @@ struct ContentView: View {
     @ObservedObject var storage: StorageService
     @ObservedObject var eventService: EventService
     @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var updates = UpdateService.shared
     @State private var selectedTab = "cameras"
     @State private var currentTime = ""
     @State private var cameras: [Camera] = []
@@ -47,7 +48,7 @@ struct ContentView: View {
                     Text("VIGIA").font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(.white)
                     Text(".").font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(VigiaTheme.accent)
                 }
-                Text("v2.2.0 • macOS").font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
+                Text("v2.3.0 • macOS").font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
             }.padding(.horizontal, 16).padding(.vertical, 12)
 
             Divider().background(VigiaTheme.border)
@@ -67,6 +68,8 @@ struct ContentView: View {
 
             Spacer()
 
+            bannerUpdate
+
             Divider().background(VigiaTheme.border)
             HStack(spacing: 8) {
                 Image(systemName: "person.crop.circle.fill")
@@ -85,6 +88,42 @@ struct ContentView: View {
         }
         .frame(width: 200)
         .background(VigiaTheme.panel)
+    }
+
+    /// Rodapé de auto-update: só aparece quando há versão nova no GitHub.
+    @ViewBuilder
+    private var bannerUpdate: some View {
+        switch updates.estado {
+        case .disponivel(let versao):
+            Button(action: { updates.baixarEInstalar() }) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("Versão \(versao) disponível", systemImage: "arrow.down.circle.fill")
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(.black)
+                    Text("Clique para atualizar e reabrir").font(.system(size: 9)).foregroundColor(.black.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8).background(VigiaTheme.accentGradient)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }.buttonStyle(.plain).padding(.horizontal, 10).padding(.bottom, 6)
+        case .baixando:
+            rodapeUpdate("Baixando atualização…", "arrow.down.circle")
+        case .instalando:
+            rodapeUpdate("Instalando…", "gearshape.arrow.triangle.2.circlepath")
+        case .atualizado:
+            rodapeUpdate("Atualizado — reabrindo…", "checkmark.circle.fill")
+        case .falha(let msg):
+            rodapeUpdate("Update falhou: \(msg)", "exclamationmark.triangle")
+        default:
+            EmptyView()
+        }
+    }
+
+    private func rodapeUpdate(_ texto: String, _ icone: String) -> some View {
+        Label(texto, systemImage: icone)
+            .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.bottom, 6)
+            .lineLimit(2)
     }
 
     private func sidebarButton(_ title: String, icon: String, tag: String) -> some View {

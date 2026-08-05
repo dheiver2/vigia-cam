@@ -50,6 +50,9 @@ struct ConfigView: View {
                     TextField("https://sua-central/webhook", text: $alarmes.webhookURL)
                         .textFieldStyle(.roundedBorder)
                 }
+                configRow(title: "Atualizações", value: "v\(UpdateService.shared.versaoAtual)") {
+                    UpdateStatusRow()
+                }
             }.padding(16)
         }
     }

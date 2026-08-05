@@ -5,6 +5,14 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.3.0] - 2026-08-05
+
+### Adicionado
+- Auto-update via GitHub Releases: "Verificar agora" em Configurações ›
+  Alarmes consulta a última versão; com update disponível, um clique baixa o
+  zip, troca o próprio .app (com backup/rollback e remoção de quarentena) e
+  reabre o app na versão nova.
+
 ## [2.2.0] - 2026-08-05
 
 Pacote "central de monitoramento": gestão, investigação e novos analíticos.
