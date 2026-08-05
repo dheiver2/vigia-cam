@@ -13,9 +13,22 @@ final class AlarmService: ObservableObject {
     @Published var regras: [AlarmRule] = []
     @Published var recentes: [AlarmEvent] = []      // histórico da sessão (cap 200)
     @Published var banner: AlarmEvent?              // alarme em destaque (auto-some)
-    @Published var somAtivo = true
-    @Published var autoSnapshot = true              // captura evidência ao disparar
-    @Published var webhookURL = ""                  // POST JSON em cada alarme (opcional)
+    @Published var somAtivo = true { didSet { persistirOpcoes() } }
+    @Published var autoSnapshot = true { didSet { persistirOpcoes() } }   // captura evidência ao disparar
+    @Published var webhookURL = "" { didSet { persistirOpcoes() } }       // POST JSON em cada alarme (opcional)
+    @Published var notificacaoSistema = true { didSet { persistirOpcoes() } } // Central de Notificações do macOS
+
+    /// Provedor de snapshot por câmera (registrado pelo card ao vivo) — permite
+    /// que o próprio motor capture a evidência e a ligue ao evento gerado.
+    private var snapshotProviders: [String: () -> URL?] = [:]
+
+    func registrarSnapshotProvider(camera: String, _ provider: @escaping () -> URL?) {
+        snapshotProviders[camera] = provider
+    }
+
+    func removerSnapshotProvider(camera: String) {
+        snapshotProviders[camera] = nil
+    }
     /// Classes monitoradas (vazio = todas). Ex.: só ["person","car"].
     @Published var classesMonitoradas: Set<String> = []
 
@@ -26,7 +39,10 @@ final class AlarmService: ObservableObject {
     private let debounce: TimeInterval = 10
     private var bannerTimer: Timer?
 
-    private init() { regras = carregar() }
+    private init() {
+        regras = carregar()
+        carregarOpcoes()
+    }
 
     func monitora(_ classe: String) -> Bool {
         classesMonitoradas.isEmpty || classesMonitoradas.contains(classe)
@@ -75,19 +91,7 @@ final class AlarmService: ObservableObject {
         ultimoDisparo[chave] = agora
         let ev = AlarmEvent(quando: agora, regra: titulo, camera: camera,
                             mensagem: mensagem, severidade: severidade)
-        DispatchQueue.main.async {
-            self.recentes.insert(ev, at: 0)
-            if self.recentes.count > 200 { self.recentes.removeLast(self.recentes.count - 200) }
-            self.banner = ev
-            self.bannerTimer?.invalidate()
-            self.bannerTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
-                self?.banner = nil
-            }
-            if self.somAtivo && severidade != .info { NSSound.beep() }
-        }
-        eventService?.registrar(tipo: "ALARME/\(severidade.rawValue)", camera: camera, detalhe: mensagem)
-        storage.auditar("alarme", detalhe: mensagem)
-        enviarWebhook(ev)
+        publicar(ev)
     }
 
     @discardableResult
@@ -95,6 +99,14 @@ final class AlarmService: ObservableObject {
         let msg = "\(regra.nome) — \(valor) \(regra.alvo.descricao) em \(camera)"
         let ev = AlarmEvent(quando: Date(), regra: regra.nome, camera: camera,
                             mensagem: msg, severidade: regra.severidade)
+        publicar(ev)
+        return ev
+    }
+
+    /// Caminho único de saída de um alarme: banner, som, snapshot de evidência
+    /// ligado ao evento, notificação do sistema, evento persistido, auditoria
+    /// e webhook.
+    private func publicar(_ ev: AlarmEvent) {
         DispatchQueue.main.async {
             self.recentes.insert(ev, at: 0)
             if self.recentes.count > 200 { self.recentes.removeLast(self.recentes.count - 200) }
@@ -103,12 +115,58 @@ final class AlarmService: ObservableObject {
             self.bannerTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
                 self?.banner = nil
             }
-            if self.somAtivo && regra.severidade != .info { NSSound.beep() }
+            if self.somAtivo && ev.severidade != .info { NSSound.beep() }
         }
-        eventService?.registrar(tipo: "ALARME/\(regra.severidade.rawValue)", camera: camera, detalhe: msg)
-        storage.auditar("alarme", detalhe: msg)
+        var snapshotPath = ""
+        if autoSnapshot, let url = snapshotProviders[ev.camera]?() {
+            snapshotPath = url.path
+        }
+        eventService?.registrar(tipo: "ALARME/\(ev.severidade.rawValue)", camera: ev.camera,
+                                detalhe: ev.mensagem, severidade: ev.severidade.rawValue,
+                                snapshot: snapshotPath)
+        storage.auditar("alarme", detalhe: ev.mensagem)
+        if notificacaoSistema && ev.severidade != .info { notificarSistema(ev) }
         enviarWebhook(ev)
-        return ev
+    }
+
+    /// Notificação na Central de Notificações do macOS via osascript — funciona
+    /// mesmo quando o binário roda fora de um bundle assinado (SwiftPM), onde
+    /// UNUserNotificationCenter aborta por falta de bundle identifier.
+    private func notificarSistema(_ ev: AlarmEvent) {
+        let titulo = "VIGIA·CAM — \(ev.severidade.label)"
+        let esc = { (s: String) in s.replacingOccurrences(of: "\\", with: "\\\\")
+                                    .replacingOccurrences(of: "\"", with: "\\\"") }
+        let script = "display notification \"\(esc(ev.mensagem))\" with title \"\(esc(titulo))\" subtitle \"\(esc(ev.camera))\""
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", script]
+        try? p.run()
+    }
+
+    // MARK: - Opções persistidas (opcoes_alarme.json)
+
+    private struct Opcoes: Codable {
+        var somAtivo: Bool, autoSnapshot: Bool, webhookURL: String, notificacaoSistema: Bool
+    }
+
+    private var carregandoOpcoes = false
+
+    private func persistirOpcoes() {
+        guard !carregandoOpcoes else { return }
+        let o = Opcoes(somAtivo: somAtivo, autoSnapshot: autoSnapshot,
+                       webhookURL: webhookURL, notificacaoSistema: notificacaoSistema)
+        if let data = try? JSONEncoder().encode(o) {
+            storage.salvarRaw(data, para: "opcoes_alarme.json")
+        }
+    }
+
+    private func carregarOpcoes() {
+        guard let data = storage.carregarRaw("opcoes_alarme.json"),
+              let o = try? JSONDecoder().decode(Opcoes.self, from: data) else { return }
+        carregandoOpcoes = true
+        somAtivo = o.somAtivo; autoSnapshot = o.autoSnapshot
+        webhookURL = o.webhookURL; notificacaoSistema = o.notificacaoSistema
+        carregandoOpcoes = false
     }
 
     /// Notificação de integração: POST JSON para um endpoint externo (SIEM,

@@ -20,6 +20,7 @@ class CameraCardViewModel: ObservableObject {
     private let tracker = ObjectTracker()
     private let lineCounter = LineCounter()
     private let zoneMonitor = ZoneMonitor()
+    private let sceneChange = SceneChangeDetector()
     private var linhaAtiva = false
     private var detectTimer: Timer?
     private var displayTimer: Timer?                  // extrapola caixas a ~15 Hz
@@ -52,19 +53,27 @@ class CameraCardViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] rodando, inalc in
                 guard let self else { return }
-                CameraHealthRegistry.shared.atualizar(self.camera.id, online: rodando, inalcancavel: inalc)
+                CameraHealthRegistry.shared.atualizar(self.camera.id, nome: self.camera.nome,
+                                                      online: rodando, inalcancavel: inalc)
             }
             .store(in: &bag)
 
-        // detecção -> motor de alarmes (+ auto-snapshot de evidência ao disparar)
+        // detecção -> motor de alarmes (a evidência agora é capturada pelo
+        // próprio motor, via snapshot provider, e fica ligada ao evento)
         detector.$detectionCount
             .receive(on: DispatchQueue.main)
             .sink { [weak self] counts in
                 guard let self, !counts.isEmpty else { return }
-                let disparados = AlarmService.shared.avaliar(camera: self.camera.nome, counts: counts)
-                if !disparados.isEmpty && AlarmService.shared.autoSnapshot {
-                    self.capturarSnapshot()   // congela a cena que gerou o alarme
-                }
+                AlarmService.shared.avaliar(camera: self.camera.nome, counts: counts)
+            }
+            .store(in: &bag)
+
+        // detecção -> LPR (OCR de placas nas caixas de veículo)
+        detector.$lastDetections
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] dets in
+                guard let self, let frame = self.frameImage else { return }
+                LPRService.shared.processar(frame: frame, deteccoes: dets, camera: self.camera.nome)
             }
             .store(in: &bag)
 
@@ -116,6 +125,9 @@ class CameraCardViewModel: ObservableObject {
         carregarAnalitico()
         startDetection()
         startDisplayLoop()
+        AlarmService.shared.registrarSnapshotProvider(camera: camera.nome) { [weak self] in
+            self?.capturarSnapshot()
+        }
     }
 
     /// Reconstrói linha/zonas a partir da configuração persistida da câmera.
@@ -136,6 +148,7 @@ class CameraCardViewModel: ObservableObject {
             RecordingService.shared.pararGravacao(camera.nome)
         }
         cameraService.stopCamera()
+        AlarmService.shared.removerSnapshotProvider(camera: camera.nome)
         CameraHealthRegistry.shared.remover(camera.id)
     }
 
@@ -161,9 +174,23 @@ class CameraCardViewModel: ObservableObject {
                  centro: CGPoint(x: $0.box.midX, y: 1 - $0.box.midY))
         }
         if linhaAtiva { lineCounter.update(alvos) }
+        // Mudança de cena: amostra o frame a cada ~5 s (75 ticks de 1/15 s).
+        if displayTick % 75 == 0, let frame = frameImage, isOnline {
+            if sceneChange.amostrar(frame) {
+                AlarmService.shared.emitir(camera: camera.nome, titulo: "Mudança de cena",
+                    mensagem: "Cena mudou bruscamente (câmera tampada/movida?) — \(camera.nome)",
+                    severidade: .aviso)
+            }
+        }
         let eventos = zoneMonitor.update(alvos, now: now)
         for e in eventos {
-            if e.tipo == .intrusao {
+            if e.tipo == .evasao {
+                AlarmService.shared.emitir(camera: camera.nome, titulo: "Evasão de zona",
+                    mensagem: "Alvo saiu da zona monitorada — \(camera.nome)", severidade: .aviso)
+            } else if e.tipo == .ausencia {
+                AlarmService.shared.emitir(camera: camera.nome, titulo: "Ausência em zona",
+                    mensagem: "Zona vigiada vazia além do tolerado — \(camera.nome)", severidade: .aviso)
+            } else if e.tipo == .intrusao {
                 intrusoesTotal += 1
                 AlarmService.shared.emitir(camera: camera.nome, titulo: "Intrusão em zona",
                     mensagem: "Intrusão (\(e.classe)) em zona restrita — \(camera.nome)", severidade: .critico)
@@ -183,6 +210,15 @@ class CameraCardViewModel: ObservableObject {
             m.intrusoes = intrusoesTotal
             m.permanencias = permanenciasTotal
             BusinessMetricsService.shared.reportar(camera: camera.nome, metrica: m)
+        }
+        // Série temporal persistida (1 amostra/min por câmera) — destrava
+        // relatório histórico; antes as métricas morriam com a sessão.
+        if displayTick % 900 == 0 {
+            EventStore.shared.registrarMetrica(
+                camera: camera.nome,
+                entradas: lineCounter.totalEntradas, saidas: lineCounter.totalSaidas,
+                ocupacao: zoneMonitor.ocupacao.values.reduce(0, +),
+                intrusoes: intrusoesTotal, permanencias: permanenciasTotal)
         }
     }
 

@@ -3,18 +3,27 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var storage: StorageService
     @ObservedObject var eventService: EventService
+    @ObservedObject private var auth = AuthService.shared
     @State private var selectedTab = "cameras"
     @State private var currentTime = ""
     @State private var cameras: [Camera] = []
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var categorias: [String] { Set(cameras.map { $0.categoria }).sorted() }
+    private var papel: Papel { auth.logado?.papel ?? .visualizador }
+    private var usuario: String { auth.logado?.nome ?? "sistema" }
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            detail
+        Group {
+            if auth.logado == nil {
+                LoginView()
+            } else {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    detail
+                }
+            }
         }
         .background(VigiaTheme.bg)
         .frame(minWidth: 900, minHeight: 600)
@@ -23,7 +32,7 @@ struct ContentView: View {
             updateTime()
             cameras = storage.carregarCameras()
             AlarmService.shared.configure(eventService: eventService, cameras: cameras)
-            RecordingService.shared.definirUsuario("sistema")
+            LPRService.shared.configure(eventService: eventService)
         }
         .onChange(of: storage.camerasVersao) {
             cameras = storage.carregarCameras()
@@ -38,20 +47,41 @@ struct ContentView: View {
                     Text("VIGIA").font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(.white)
                     Text(".").font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(VigiaTheme.accent)
                 }
-                Text("v2.0.0 • macOS").font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
+                Text("v2.2.0 • macOS").font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
             }.padding(.horizontal, 16).padding(.vertical, 12)
 
             Divider().background(VigiaTheme.border)
 
             sidebarButton("Ao Vivo", icon: "video.fill", tag: "cameras")
+            sidebarButton("Mapa", icon: "map.fill", tag: "map")
             sidebarButton("Alarmes", icon: "bell.fill", tag: "alarms")
+            sidebarButton("Placas", icon: "text.rectangle.page", tag: "lpr")
             sidebarButton("Negócio", icon: "chart.line.uptrend.xyaxis", tag: "business")
             sidebarButton("Dashboard", icon: "chart.bar.fill", tag: "dashboard")
             sidebarButton("Eventos", icon: "bolt.fill", tag: "events")
+            sidebarButton("Gravações", icon: "film.stack", tag: "recordings")
             sidebarButton("Relatórios", icon: "doc.richtext.fill", tag: "reports")
-            sidebarButton("Configurações", icon: "gearshape.fill", tag: "config")
+            if papel.podeConfigurar {
+                sidebarButton("Configurações", icon: "gearshape.fill", tag: "config")
+            }
 
             Spacer()
+
+            Divider().background(VigiaTheme.border)
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 16)).foregroundColor(VigiaTheme.accent)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(usuario).font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                    Text(papel.label).font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
+                }
+                Spacer()
+                Button(action: { auth.logout(); selectedTab = "cameras" }) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 12)).foregroundColor(VigiaTheme.muted)
+                }.buttonStyle(.plain).help("Sair")
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
         }
         .frame(width: 200)
         .background(VigiaTheme.panel)
@@ -78,13 +108,16 @@ struct ContentView: View {
     private var detail: some View {
         switch selectedTab {
         case "cameras": LiveWallView(storage: storage)
+        case "map": CameraMapView(storage: storage)
         case "alarms": AlarmsView(categorias: categorias)
+        case "lpr": LPRView(podeGerenciar: papel.podeOperar)
         case "business": BusinessDashboardView()
         case "dashboard": DashboardView(storage: storage, eventService: eventService)
-        case "events": EventListView(eventService: eventService)
+        case "events": EventListView(eventService: eventService, usuario: usuario)
+        case "recordings": RecordingsBrowserView(usuario: usuario, podeOperar: papel.podeOperar)
         case "reports": ReportsView(eventService: eventService, totalCameras: cameras.count,
-                                     usuario: "sistema")
-        case "config": ConfigView(storage: storage)
+                                     usuario: usuario)
+        case "config" where papel.podeConfigurar: ConfigView(storage: storage)
         default: LiveWallView(storage: storage)
         }
     }

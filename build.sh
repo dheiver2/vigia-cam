@@ -50,9 +50,9 @@ cat > VigiaCam.app/Contents/Info.plist << 'EOF'
     <key>CFBundleIdentifier</key>
     <string>com.vigiacam.app</string>
     <key>CFBundleVersion</key>
-    <string>2.0.0</string>
+    <string>2.2.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.0.0</string>
+    <string>2.2.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -77,4 +77,4 @@ echo "🔏 Assinando (ad-hoc)..."
 codesign --force --deep --sign - VigiaCam.app
 
 echo "✅ Done! Opening VigiaCam..."
-open VigiaCam.app
+echo "(build ok — não abrindo automaticamente)"

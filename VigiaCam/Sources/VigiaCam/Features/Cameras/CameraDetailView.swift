@@ -189,7 +189,7 @@ struct CameraDetailView: View {
 
     // MARK: - Analítico de negócio (linha + zonas)
 
-    private var corZona: [TipoZona: Color] { [.intrusao: VigiaTheme.danger, .ocupacao: VigiaTheme.accent2, .permanencia: VigiaTheme.warning] }
+    private var corZona: [TipoZona: Color] { [.intrusao: VigiaTheme.danger, .ocupacao: VigiaTheme.accent2, .permanencia: VigiaTheme.warning, .evasao: VigiaTheme.accent, .ausencia: VigiaTheme.ok] }
 
     /// Desenha a linha de contagem e as zonas configuradas (visualização).
     @ViewBuilder

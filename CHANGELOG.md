@@ -5,6 +5,30 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.2.0] - 2026-08-05
+
+Pacote "central de monitoramento": gestão, investigação e novos analíticos.
+
+### Adicionado
+- Autenticação local com papéis (admin/operador/visualizador), PBKDF2-SHA256,
+  gestão de usuários e tela de trilha de auditoria (RBAC prometido no README
+  agora existe de verdade).
+- Banco SQLite de eventos (busca por texto/câmera/tipo, tratativa "checado
+  por", evidência ligada ao evento) — o CSV continua sendo escrito.
+- Log persistente de status online/offline por câmera + painel de contadores
+  de ocorrências por tipo no Dashboard.
+- Mapa de câmeras (MapKit) com pins coloridos pelo estado real do stream.
+- LPR: leitura de placas BR (Mercosul/antiga) via Vision sobre as caixas de
+  veículo do YOLO, com busca histórica e lista de placas de interesse
+  (dispara alarme crítico).
+- Novos analíticos de zona: evasão (saída da zona) e ausência (zona vazia
+  além do tolerado); detecção de mudança de cena (câmera tampada/movida).
+- Aba Gravações: playback de clipes dentro do app, exportação de evidência e
+  time lapse acelerado (4–32×) via ffmpeg.
+- Notificações do sistema (Central de Notificações) por alarme; webhook,
+  som, snapshot automático e LPR agora configuráveis pela UI.
+- Série temporal das métricas de negócio persistida (1 amostra/min/câmera).
+
 ## [2.0.0] - 2026-07-12
 
 Reescrita completa 100% nativa em Swift/SwiftUI para macOS (a versão

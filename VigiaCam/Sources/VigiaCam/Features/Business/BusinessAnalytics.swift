@@ -54,13 +54,15 @@ final class LineCounter {
 
 /// Zona de análise: retângulo normalizado + tipo de vigilância.
 enum TipoZona: String, Codable, CaseIterable, Identifiable {
-    case intrusao, ocupacao, permanencia
+    case intrusao, ocupacao, permanencia, evasao, ausencia
     var id: String { rawValue }
     var label: String {
         switch self {
         case .intrusao: return "Intrusão (área restrita)"
         case .ocupacao: return "Ocupação (contagem)"
         case .permanencia: return "Permanência (loitering)"
+        case .evasao: return "Evasão (saída da zona)"
+        case .ausencia: return "Ausência (zona vazia)"
         }
     }
 }
@@ -77,8 +79,13 @@ struct ZonaAnalise: Codable, Identifiable, Hashable {
 final class ZoneMonitor {
     var zonas: [ZonaAnalise] = []
     var limiarPermanenciaSeg: TimeInterval = 8
+    /// Tempo de zona vazia antes de disparar AUSÊNCIA (ex.: posto de vigia
+    /// abandonado, vaga de viatura desocupada).
+    var limiarAusenciaSeg: TimeInterval = 30
     private(set) var ocupacao: [String: Int] = [:]     // zonaID -> nº de alvos dentro
     private var entrouEm: [String: TimeInterval] = [:]  // "zonaID|objId" -> instante
+    private var vaziaDesde: [String: TimeInterval] = [:] // zonaID -> desde quando está vazia
+    private var jaTeveOcupacao: Set<String> = []         // ausência só arma depois da 1ª presença
 
     struct Evento { let zonaID: String; let tipo: TipoZona; let classe: String; let objId: Int }
 
@@ -106,12 +113,37 @@ final class ZoneMonitor {
                         eventos.append(Evento(zonaID: zona.id, tipo: .permanencia, classe: alvo.classe, objId: alvo.id))
                         entrouEm[chave] = now            // re-arma p/ não spammar
                     }
-                case .ocupacao:
+                case .ocupacao, .evasao, .ausencia:
                     entrouEm[chave] = now
                 }
             }
         }
+        // EVASÃO: alvo que estava dentro e não está mais -> saiu da zona.
+        for (chave, _) in entrouEm where !presentes.contains(chave) {
+            let partes = chave.split(separator: "|")
+            guard partes.count == 2, let objId = Int(partes[1]) else { continue }
+            let zonaID = String(partes[0])
+            if let zona = zonas.first(where: { $0.id == zonaID }), zona.tipo == .evasao {
+                eventos.append(Evento(zonaID: zonaID, tipo: .evasao, classe: "", objId: objId))
+            }
+        }
         entrouEm = entrouEm.filter { presentes.contains($0.key) }   // saiu da zona -> esquece
+
+        // AUSÊNCIA: zona que deveria ter presença está vazia há tempo demais.
+        for zona in zonas where zona.tipo == .ausencia {
+            let vazia = (ocup[zona.id] ?? 0) == 0
+            if !vazia {
+                jaTeveOcupacao.insert(zona.id)
+                vaziaDesde[zona.id] = nil
+            } else if jaTeveOcupacao.contains(zona.id) {
+                let desde = vaziaDesde[zona.id] ?? now
+                if vaziaDesde[zona.id] == nil { vaziaDesde[zona.id] = now }
+                if now - desde >= limiarAusenciaSeg {
+                    eventos.append(Evento(zonaID: zona.id, tipo: .ausencia, classe: "", objId: -1))
+                    vaziaDesde[zona.id] = now      // re-arma p/ não spammar
+                }
+            }
+        }
         ocupacao = ocup
         return eventos
     }

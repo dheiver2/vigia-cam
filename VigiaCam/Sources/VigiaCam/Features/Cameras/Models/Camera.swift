@@ -12,6 +12,9 @@ struct Camera: Codable, Identifiable, Hashable {
     var nome: String
     var categoria: String
     var url: String
+    /// Posição geográfica (opcional) — alimenta o Mapa de câmeras.
+    var latitude: Double?
+    var longitude: Double?
 
     /// Derivado do esquema da URL — não é mais um campo solto que podia
     /// contradizer o endereço (`tipo: .hls` com `url: "rtsp://…"`).
@@ -73,7 +76,7 @@ struct Camera: Codable, Identifiable, Hashable {
 
     // MARK: - Codable (compatível com o formato antigo)
 
-    private enum CodingKeys: String, CodingKey { case id, nome, categoria, url }
+    private enum CodingKeys: String, CodingKey { case id, nome, categoria, url, latitude, longitude }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -84,6 +87,8 @@ struct Camera: Codable, Identifiable, Hashable {
         id = (try? c.decode(String.self, forKey: .id)) ?? url
         nome = (try? c.decode(String.self, forKey: .nome)) ?? url
         categoria = (try? c.decode(String.self, forKey: .categoria)) ?? Self.categoriaPadrao
+        latitude = try? c.decode(Double.self, forKey: .latitude)
+        longitude = try? c.decode(Double.self, forKey: .longitude)
     }
 
     // MARK: - Agrupamento

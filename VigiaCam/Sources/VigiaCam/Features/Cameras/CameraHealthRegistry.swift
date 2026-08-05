@@ -15,9 +15,13 @@ final class CameraHealthRegistry: ObservableObject {
     /// Ids das câmeras que já desistiram de reconectar.
     @Published private(set) var inalcancaveis: Set<String> = []
 
+    /// Último estado JÁ REGISTRADO no histórico, por id — evita gravar o
+    /// "offline" inicial de um card que acabou de nascer e ainda nem conectou.
+    private var ultimoRegistrado: [String: Bool] = [:]
+
     private init() {}
 
-    func atualizar(_ id: String, online estaOnline: Bool, inalcancavel: Bool) {
+    func atualizar(_ id: String, nome: String? = nil, online estaOnline: Bool, inalcancavel: Bool) {
         var novoOnline = online
         var novoInalc = inalcancaveis
         if estaOnline { novoOnline.insert(id) } else { novoOnline.remove(id) }
@@ -25,6 +29,21 @@ final class CameraHealthRegistry: ObservableObject {
         guard novoOnline != online || novoInalc != inalcancaveis else { return }
         online = novoOnline
         inalcancaveis = novoInalc
+
+        // Log persistente de transições online/offline (histórico de uptime).
+        let rotulo = nome ?? id
+        switch (ultimoRegistrado[id], estaOnline) {
+        case (nil, true), (false, true):
+            ultimoRegistrado[id] = true
+            EventStore.shared.registrarStatus(camera: rotulo, online: true)
+            EventStore.shared.registrar(tipo: "STATUS", camera: rotulo, detalhe: "câmera online")
+        case (true, false):
+            ultimoRegistrado[id] = false
+            EventStore.shared.registrarStatus(camera: rotulo, online: false)
+            EventStore.shared.registrar(tipo: "STATUS", camera: rotulo, detalhe: "câmera offline")
+        default:
+            break   // nunca esteve online — não registra o "offline" de nascença
+        }
     }
 
     /// Chamado quando o card sai de cena (troca de página do videowall): sem

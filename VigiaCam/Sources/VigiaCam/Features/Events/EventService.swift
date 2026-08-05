@@ -21,7 +21,10 @@ final class EventService: ObservableObject {
         self.storage = storage
     }
 
-    func registrar(tipo: String, camera: String, detalhe: String) {
+    func registrar(tipo: String, camera: String, detalhe: String,
+                   severidade: String = "", snapshot: String = "") {
+        EventStore.shared.registrar(tipo: tipo, camera: camera, detalhe: detalhe,
+                                    severidade: severidade, snapshot: snapshot)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let data = formatter.string(from: Date())

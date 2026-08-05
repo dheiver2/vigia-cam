@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ConfigView: View {
     @ObservedObject var storage: StorageService
+    @ObservedObject private var alarmes = AlarmService.shared
+    @ObservedObject private var lpr = LPRService.shared
     @State private var config: AppConfig = .default
     @State private var cameras: [Camera] = []
     @State private var showingAddCamera = false
@@ -9,16 +11,47 @@ struct ConfigView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Tab", selection: $selectedTab) { Text("Detecção").tag(0); Text("Câmeras").tag(1) }
+            Picker("Tab", selection: $selectedTab) {
+                Text("Detecção").tag(0); Text("Câmeras").tag(1); Text("Alarmes").tag(2)
+                Text("Usuários").tag(3); Text("Auditoria").tag(4)
+            }
                 .pickerStyle(.segmented).padding(16)
             switch selectedTab {
             case 0: configTab
             case 1: camerasTab
+            case 2: alarmesTab
+            case 3: UsersAdminView()
+            case 4: AuditLogView()
             default: configTab
             }
         }
         .background(VigiaTheme.bg)
         .onAppear { config = storage.carregarConfig(); cameras = storage.carregarCameras() }
+    }
+
+    /// Opções de resposta a alarme e integrações — o webhook existia no motor
+    /// desde sempre, mas nenhuma tela o expunha.
+    private var alarmesTab: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                configRow(title: "Som ao disparar", value: alarmes.somAtivo ? "ligado" : "desligado") {
+                    Toggle("", isOn: $alarmes.somAtivo).toggleStyle(.switch).tint(VigiaTheme.accent).labelsHidden()
+                }
+                configRow(title: "Notificação do sistema (macOS)", value: alarmes.notificacaoSistema ? "ligada" : "desligada") {
+                    Toggle("", isOn: $alarmes.notificacaoSistema).toggleStyle(.switch).tint(VigiaTheme.accent).labelsHidden()
+                }
+                configRow(title: "Snapshot automático de evidência", value: alarmes.autoSnapshot ? "ligado" : "desligado") {
+                    Toggle("", isOn: $alarmes.autoSnapshot).toggleStyle(.switch).tint(VigiaTheme.accent).labelsHidden()
+                }
+                configRow(title: "LPR — leitura de placas", value: lpr.ativo ? "ligado" : "desligado") {
+                    Toggle("", isOn: $lpr.ativo).toggleStyle(.switch).tint(VigiaTheme.accent).labelsHidden()
+                }
+                configRow(title: "Webhook (POST JSON por alarme)", value: alarmes.webhookURL.isEmpty ? "—" : "ativo") {
+                    TextField("https://sua-central/webhook", text: $alarmes.webhookURL)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }.padding(16)
+        }
     }
 
     private var configTab: some View {
