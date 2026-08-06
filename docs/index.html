@@ -77,14 +77,15 @@
     <p class="lead">
       Native desktop VMS for macOS that monitors multiple RTSP/HLS cameras
       on a live videowall, with real-time person and vehicle detection
-      (YOLOv8n on Neural Engine) and smart rule-based alarms.
-      Capture evidence with SHA-256 chain of custody, LGPD privacy masks,
-      PDF reports — built for CCTV
-      and public security deployments.
+      (YOLOv8n on Neural Engine), smart rule-based alarms, license plate
+      reading (LPR), camera map, and zone analytics (intrusion, loitering,
+      absence). Evidence with SHA-256 chain of custody, searchable SQLite
+      event history, role-based access, built-in auto-update — built for
+      CCTV and public security deployments.
     </p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/dheiver2/vigia-cam/releases/latest/download/VigiaCam-macOS.zip">&#8595; Download para macOS</a>
-      <a class="btn primary" href="https://github.com/dheiver2/vigia-cam/releases/latest/download/VigiaCam-Windows.zip">&#8595; Download para Windows</a>
+      <a class="btn primary" href="https://github.com/dheiver2/vigia-cam/releases/download/v2.1.0/VigiaCam-Windows.zip">&#8595; Download para Windows</a>
       <a class="btn ghost" href="https://github.com/dheiver2/vigia-cam">View on GitHub</a>
       <a class="btn ghost" href="#features">Explore features</a>
     </div>
@@ -129,6 +130,15 @@
       <div class="feat"><div class="ic">📡</div><h3>Resilient Connection</h3>
         <p>Auto-reconnect with exponential backoff and watchdog — cameras recover automatically when the signal returns.</p>
         <span class="tag">High Availability</span></div>
+      <div class="feat"><div class="ic">🚗</div><h3>License Plate Reading</h3>
+        <p>On-device LPR over detected vehicles (BR Mercosul & legacy formats), plate history search, and hotlist alerts.</p>
+        <span class="tag">LPR</span></div>
+      <div class="feat"><div class="ic">🗺️</div><h3>Camera Map & Analytics</h3>
+        <p>Geographic camera map with live status pins, plus zone analytics: intrusion, loitering, occupancy, exit, and absence.</p>
+        <span class="tag">Map</span></div>
+      <div class="feat"><div class="ic">🔎</div><h3>Event Search & Playback</h3>
+        <p>SQLite event history with filters and incident handling ("checked by"), in-app clip playback, time lapse, and auto-update.</p>
+        <span class="tag">Investigation</span></div>
     </div>
   </div>
 </section>
