@@ -25,7 +25,7 @@ enum AlvoAlarme: Hashable {
     var descricao: String {
         switch self {
         case .qualquerObjeto: return "objetos"
-        case .classe(let c): return c
+        case .classe(let c): return ClassesPT.pt(c)
         }
     }
 

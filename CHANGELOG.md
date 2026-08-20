@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+- Harness de métricas de detecção: `VigiaCam --eval Tests-fixtures` roda o
+  pipeline real (Vision/CoreML) sobre imagens com ground-truth e imprime
+  precisão/recall/IoU por classe; baseline registrado em Tests-fixtures/.
+- Tradução PT-BR completa das 90 classes (COCO + EPI) numa fonte única
+  (`ClassesPT`), usada no overlay dos cards e nas regras de alarme; teste
+  garante que nenhuma classe fica sem tradução. Porte Windows idem (80 COCO).
+- Windows: votação de maioria da classe por track (janela 5) e histerese de
+  exibição (2 confirmações) — paridade com o ObjectTracker do macOS; acaba o
+  "car↔truck" piscando e as caixas-fantasma de 1 frame.
+
 ## [2.4.0] - 2026-08-19
 
 ### Adicionado

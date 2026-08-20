@@ -257,5 +257,17 @@ NightBoost.modo = .sempre
 check(NightBoost.aplicarSeNecessario(clara) !== clara, "sempre realça mesmo cena clara")
 NightBoost.modo = modoOriginal
 
+
+// MARK: - ClassesPT (tradução completa das labels)
+
+print("\n== ClassesPT ==")
+let semPT_COCO = ClassesCOCO.nomes.filter { ClassesPT.mapa[$0] == nil }
+let semPT_EPI = ClassesEPI.nomes.filter { ClassesPT.mapa[$0] == nil }
+check(semPT_COCO.isEmpty, "todas as 80 classes COCO têm PT \(semPT_COCO)")
+check(semPT_EPI.isEmpty, "todas as 10 classes EPI têm PT \(semPT_EPI)")
+check(ClassesPT.mapa.values.allSatisfy { !$0.isEmpty }, "nenhuma tradução vazia")
+check(ClassesPT.pt("person") == "pessoa", "pt(person) == pessoa")
+check(ClassesPT.pt("classe-desconhecida") == "classe-desconhecida", "classe fora do mapa devolve o original")
+
 print("\nResultado: \(passou) passaram, \(falhou) falharam")
 exit(falhou == 0 ? 0 : 1)

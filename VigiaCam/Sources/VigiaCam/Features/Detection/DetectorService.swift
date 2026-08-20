@@ -83,6 +83,15 @@ enum ModelProvider {
         if let u = Bundle.main.url(forResource: nome, withExtension: "mlpackage") {
             urls.append(u)
         }
+        // Rodando via `swift run`/binário solto (ex.: modo --eval), os recursos
+        // vivem no bundle do SPM ao lado do executável, não num .app.
+        if let rb = Bundle.module.resourceURL {
+            urls.append(rb.appendingPathComponent("Resources/\(nome).mlpackage"))
+        }
+        // Binário solto do SPM (.build/release): o bundle fica AO LADO do
+        // executável e não tem a estrutura Contents/Resources de um .app.
+        urls.append(Bundle.main.bundleURL
+            .appendingPathComponent("VigiaCam_VigiaCam.bundle/Resources/\(nome).mlpackage"))
         let bp = Bundle.main.bundlePath
         for p in ["/Contents/Resources/\(nome).mlpackage",
                   "/Contents/Resources/VigiaCam_VigiaCam.bundle/Contents/Resources/\(nome).mlpackage",

@@ -243,9 +243,10 @@ struct DetectionOverlay: View {
                 let w = box.size.width * rect.width
                 let h = box.size.height * rect.height
                 let color = DetectorService.color(for: obj.label)
+                let nomePT = ClassesPT.pt(obj.label)
                 let etiqueta = mostrarID
-                    ? "\(obj.label) #\(obj.id) · \(Int(obj.confidence * 100))%"
-                    : "\(obj.label) \(Int(obj.confidence * 100))%"
+                    ? "\(nomePT) #\(obj.id) · \(Int(obj.confidence * 100))%"
+                    : "\(nomePT) \(Int(obj.confidence * 100))%"
 
                 RoundedRectangle(cornerRadius: 2)
                     .stroke(color, lineWidth: 2)

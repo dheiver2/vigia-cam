@@ -303,6 +303,23 @@ function toggleGravacao(video, cam, btn) {
 const tracks = {}   // camUrl -> [{id,cx,cy,cls,idade}]
 let proximoId = 1
 
+// Paridade com o ObjectTracker do macOS: votação de maioria da classe (janela
+// de 5) elimina o "car↔truck" piscando no MESMO objeto, e a histerese (hits>=2
+// pra exibir) mata detecções de borda de 1 frame.
+const JANELA_LABEL = 5
+const CONFIRMAR = 2
+
+function rotuloMajoritario(hist) {
+  const cont = {}
+  for (const l of hist) cont[l] = (cont[l] || 0) + 1
+  const max = Math.max(...Object.values(cont))
+  const empatados = Object.keys(cont).filter(k => cont[k] === max)
+  if (empatados.length === 1) return empatados[0]
+  // empate: o mais recente vence (objeto pode ter genuinamente mudado de classe)
+  for (let i = hist.length - 1; i >= 0; i--) if (empatados.includes(hist[i])) return hist[i]
+  return hist[hist.length - 1]
+}
+
 function rastreia(cam, dets) {
   const ts = tracks[cam.url] || (tracks[cam.url] = [])
   ts.forEach(t => t.idade++)
@@ -314,8 +331,21 @@ function rastreia(cam, dets) {
       const dist = Math.hypot(t.cx - cx, t.cy - cy)
       if (dist < melhorDist) { melhor = t; melhorDist = dist }
     }
-    if (melhor) { melhor.cx = cx; melhor.cy = cy; melhor.idade = 0; d.id = melhor.id }
-    else { const id = proximoId++; ts.push({ id, cx, cy, cls: d.cls, idade: 0 }); d.id = id }
+    if (melhor) {
+      melhor.cx = cx; melhor.cy = cy; melhor.idade = 0; melhor.hits++
+      melhor.hist.push(d.cls)
+      if (melhor.hist.length > JANELA_LABEL) melhor.hist.shift()
+      d.id = melhor.id
+      d.confirmado = melhor.hits >= CONFIRMAR
+      // classe/label exibidas = voto de maioria da janela, não o último frame
+      const cls = rotuloMajoritario(melhor.hist)
+      d.cls = cls; d.label = CLASS_PT[cls] || cls
+    } else {
+      const id = proximoId++
+      ts.push({ id, cx, cy, cls: d.cls, idade: 0, hits: 1, hist: [d.cls] })
+      d.id = id
+      d.confirmado = false
+    }
   }
   tracks[cam.url] = ts.filter(t => t.idade < 30)
 }
@@ -332,6 +362,7 @@ function iniciaDeteccao(video, overlay, card, cam) {
       dets = await Detector.detect(video, cfg.confianca, null, cfg.modoNoturno) || []
       frames++
       rastreia(cam, dets)
+      dets = dets.filter(d => d.confirmado)
       avaliaAlarmes(dets, cam)
       state.contagens[cam.nome] = dets
     }
