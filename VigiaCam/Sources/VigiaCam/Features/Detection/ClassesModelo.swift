@@ -35,46 +35,51 @@ enum ClassesCOCO {
 /// inglês continuam sendo a chave interna (regras de alarme, banco, contadores)
 /// — só a EXIBIÇÃO é traduzida, então mudar tradução nunca quebra dado antigo.
 enum ClassesPT {
-    static let mapa: [String: String] = [
+    // Array de pares + Dictionary(uniqueKeysWithValues:) em vez de literal de
+    // dicionário: o type-checker do swiftc degrada MUITO (minutos) em literais
+    // [String: String] com dezenas de entradas; array de tuplas é linear.
+    private static let pares: [(String, String)] = [
         // COCO (80)
-        "person": "pessoa", "bicycle": "bicicleta", "car": "carro",
-        "motorcycle": "moto", "airplane": "avião", "bus": "ônibus",
-        "train": "trem", "truck": "caminhão", "boat": "barco",
-        "traffic light": "semáforo", "fire hydrant": "hidrante",
-        "stop sign": "placa de pare", "parking meter": "parquímetro",
-        "bench": "banco (assento)", "bird": "pássaro", "cat": "gato",
-        "dog": "cachorro", "horse": "cavalo", "sheep": "ovelha",
-        "cow": "vaca", "elephant": "elefante", "bear": "urso",
-        "zebra": "zebra", "giraffe": "girafa", "backpack": "mochila",
-        "umbrella": "guarda-chuva", "handbag": "bolsa", "tie": "gravata",
-        "suitcase": "mala", "frisbee": "frisbee", "skis": "esquis",
-        "snowboard": "snowboard", "sports ball": "bola",
-        "kite": "pipa", "baseball bat": "taco de beisebol",
-        "baseball glove": "luva de beisebol", "skateboard": "skate",
-        "surfboard": "prancha de surfe", "tennis racket": "raquete",
-        "bottle": "garrafa", "wine glass": "taça", "cup": "copo",
-        "fork": "garfo", "knife": "faca", "spoon": "colher",
-        "bowl": "tigela", "banana": "banana", "apple": "maçã",
-        "sandwich": "sanduíche", "orange": "laranja",
-        "broccoli": "brócolis", "carrot": "cenoura",
-        "hot dog": "cachorro-quente", "pizza": "pizza", "donut": "rosquinha",
-        "cake": "bolo", "chair": "cadeira", "couch": "sofá",
-        "potted plant": "vaso de planta", "bed": "cama",
-        "dining table": "mesa", "toilet": "vaso sanitário", "tv": "TV",
-        "laptop": "notebook", "mouse": "mouse", "remote": "controle remoto",
-        "keyboard": "teclado", "cell phone": "celular",
-        "microwave": "micro-ondas", "oven": "forno", "toaster": "torradeira",
-        "sink": "pia", "refrigerator": "geladeira", "book": "livro",
-        "clock": "relógio", "vase": "vaso", "scissors": "tesoura",
-        "teddy bear": "urso de pelúcia", "hair drier": "secador",
-        "toothbrush": "escova de dentes",
+        ("person", "pessoa"), ("bicycle", "bicicleta"), ("car", "carro"),
+        ("motorcycle", "moto"), ("airplane", "avião"), ("bus", "ônibus"),
+        ("train", "trem"), ("truck", "caminhão"), ("boat", "barco"),
+        ("traffic light", "semáforo"), ("fire hydrant", "hidrante"),
+        ("stop sign", "placa de pare"), ("parking meter", "parquímetro"),
+        ("bench", "banco (assento)"), ("bird", "pássaro"), ("cat", "gato"),
+        ("dog", "cachorro"), ("horse", "cavalo"), ("sheep", "ovelha"),
+        ("cow", "vaca"), ("elephant", "elefante"), ("bear", "urso"),
+        ("zebra", "zebra"), ("giraffe", "girafa"), ("backpack", "mochila"),
+        ("umbrella", "guarda-chuva"), ("handbag", "bolsa"), ("tie", "gravata"),
+        ("suitcase", "mala"), ("frisbee", "frisbee"), ("skis", "esquis"),
+        ("snowboard", "snowboard"), ("sports ball", "bola"),
+        ("kite", "pipa"), ("baseball bat", "taco de beisebol"),
+        ("baseball glove", "luva de beisebol"), ("skateboard", "skate"),
+        ("surfboard", "prancha de surfe"), ("tennis racket", "raquete"),
+        ("bottle", "garrafa"), ("wine glass", "taça"), ("cup", "copo"),
+        ("fork", "garfo"), ("knife", "faca"), ("spoon", "colher"),
+        ("bowl", "tigela"), ("banana", "banana"), ("apple", "maçã"),
+        ("sandwich", "sanduíche"), ("orange", "laranja"),
+        ("broccoli", "brócolis"), ("carrot", "cenoura"),
+        ("hot dog", "cachorro-quente"), ("pizza", "pizza"), ("donut", "rosquinha"),
+        ("cake", "bolo"), ("chair", "cadeira"), ("couch", "sofá"),
+        ("potted plant", "vaso de planta"), ("bed", "cama"),
+        ("dining table", "mesa"), ("toilet", "vaso sanitário"), ("tv", "TV"),
+        ("laptop", "notebook"), ("mouse", "mouse"), ("remote", "controle remoto"),
+        ("keyboard", "teclado"), ("cell phone", "celular"),
+        ("microwave", "micro-ondas"), ("oven", "forno"), ("toaster", "torradeira"),
+        ("sink", "pia"), ("refrigerator", "geladeira"), ("book", "livro"),
+        ("clock", "relógio"), ("vase", "vaso"), ("scissors", "tesoura"),
+        ("teddy bear", "urso de pelúcia"), ("hair drier", "secador"),
+        ("toothbrush", "escova de dentes"),
         // EPI (10)
-        "Hardhat": "capacete", "Mask": "máscara",
-        "NO-Hardhat": "SEM capacete", "NO-Mask": "SEM máscara",
-        "NO-Safety Vest": "SEM colete", "Person": "pessoa",
-        "Safety Cone": "cone", "Safety Vest": "colete",
-        "machinery": "maquinário", "vehicle": "veículo"
+        ("Hardhat", "capacete"), ("Mask", "máscara"),
+        ("NO-Hardhat", "SEM capacete"), ("NO-Mask", "SEM máscara"),
+        ("NO-Safety Vest", "SEM colete"), ("Person", "pessoa"),
+        ("Safety Cone", "cone"), ("Safety Vest", "colete"),
+        ("machinery", "maquinário"), ("vehicle", "veículo")
     ]
+
+    static let mapa = Dictionary(uniqueKeysWithValues: pares)
 
     /// Nome de exibição em PT; devolve o original se não mapeado (nunca vazio).
     static func pt(_ nome: String) -> String { mapa[nome] ?? nome }

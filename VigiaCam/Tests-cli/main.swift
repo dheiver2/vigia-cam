@@ -218,12 +218,13 @@ check(cifrado != claro, "encrypt() não devolve o texto claro")
 check(CryptoService.decrypt(cifrado) == claro, "decrypt(encrypt(x)) == x")
 check(CryptoService.decrypt(Data("lixo".utf8)) == nil, "decrypt() devolve nil em dado inválido")
 
-// A chave tem de vir do Keychain — duas leituras seguidas precisam ser a MESMA,
-// senão o dado gravado num lançamento fica ilegível no próximo.
+// Duas leituras seguidas precisam ser a MESMA chave dentro do processo.
+// (A persistência real Keychain/arquivo é coberta pelo XCTest no CI — aqui
+// roda com VIGIA_CHAVE_TESTE=1 para não disparar diálogo de senha do macOS.)
 let k1 = CryptoService.loadOrCreateKey().withUnsafeBytes { Data($0) }
 let k2 = CryptoService.loadOrCreateKey().withUnsafeBytes { Data($0) }
 check(k1.count == 32, "chave tem 256 bits (\(k1.count * 8))")
-check(k1 == k2, "loadOrCreateKey() é estável (persistida no Keychain)")
+check(k1 == k2, "loadOrCreateKey() é estável no processo")
 
 
 // MARK: - NightBoost (modo noturno de detecção)

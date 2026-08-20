@@ -20,4 +20,6 @@ swiftc -o "$OUT" \
   "Tests-cli/main.swift"
 
 echo "== Executando testes =="
-"$OUT"
+# Chave em memória: binário de teste não assinado tocando o Keychain dispara
+# diálogo de senha do macOS e trava a suíte.
+VIGIA_CHAVE_TESTE=1 "$OUT"

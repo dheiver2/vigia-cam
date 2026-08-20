@@ -38,7 +38,17 @@ enum CryptoService {
             .appendingPathComponent(".chave")
     }
 
+    /// Chave efêmera para TESTES: quando o processo roda com
+    /// VIGIA_CHAVE_TESTE=1, nada de Keychain/arquivo é tocado. Binários de
+    /// teste da CLI são recompilados (não assinados) a cada execução — cada
+    /// acesso ao Keychain deles dispara um diálogo de senha do macOS e trava
+    /// a suíte até alguém clicar.
+    private static let chaveTeste: SymmetricKey? =
+        ProcessInfo.processInfo.environment["VIGIA_CHAVE_TESTE"] == "1"
+            ? SymmetricKey(size: .bits256) : nil
+
     static func loadOrCreateKey() -> SymmetricKey {
+        if let t = chaveTeste { return t }
         if let doKeychain = loadKey() {
             // As duas cópias TÊM de bater. Se divergirem, um lançamento que só
             // consiga ler o arquivo decifraria com a chave errada e trataria
