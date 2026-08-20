@@ -29,7 +29,18 @@ const Detector = (() => {
   const wctx = work.getContext('2d', { willReadFrequently: true })
 
   // Letterbox igual ao Vision (scaleFit): mantém proporção, barras pretas.
-  function preprocess(video) {
+  // Luminância média (0–1, Rec. 709) amostrando 1 a cada 16 pixels — barato.
+  function lumaMedia(data) {
+    let soma = 0, n = 0
+    for (let i = 0; i < data.length; i += 64) {
+      soma += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
+      n++
+    }
+    return n ? soma / n / 255 : 1
+  }
+  const LIMIAR_ESCURO = 0.25
+
+  function preprocess(video, modoNoturno) {
     const vw = video.videoWidth, vh = video.videoHeight
     if (!vw || !vh) return null
     const scale = Math.min(IMG / vw, IMG / vh)
@@ -37,7 +48,17 @@ const Detector = (() => {
     const dx = (IMG - nw) / 2, dy = (IMG - nh) / 2
     wctx.fillStyle = '#000'; wctx.fillRect(0, 0, IMG, IMG)
     wctx.drawImage(video, dx, dy, nw, nh)
-    const { data } = wctx.getImageData(0, 0, IMG, IMG)
+    let { data } = wctx.getImageData(0, 0, IMG, IMG)
+    // Modo noturno (paridade com o NightBoost do macOS): realce de baixa luz
+    // ANTES da inferência. Redesenha com filtro só quando necessário — de dia
+    // no modo "auto" não custa nada.
+    if (modoNoturno === 'sempre' || (modoNoturno === 'auto' && lumaMedia(data) < LIMIAR_ESCURO)) {
+      wctx.filter = 'brightness(1.9) contrast(1.15) saturate(1.15)'
+      wctx.fillStyle = '#000'; wctx.fillRect(0, 0, IMG, IMG)
+      wctx.drawImage(video, dx, dy, nw, nh)
+      wctx.filter = 'none'
+      ;({ data } = wctx.getImageData(0, 0, IMG, IMG))
+    }
     const f = new Float32Array(3 * IMG * IMG)
     const area = IMG * IMG
     for (let i = 0; i < area; i++) {
@@ -86,12 +107,12 @@ const Detector = (() => {
   }
 
   let busy = false
-  async function detect(video, conf, classesAtivas) {
+  async function detect(video, conf, classesAtivas, modoNoturno) {
     if (busy) return null
     busy = true
     try {
       const s = await ensure()
-      const meta = preprocess(video)
+      const meta = preprocess(video, modoNoturno)
       if (!meta) return null
       const out = await s.run({ [s.inputNames[0]]: meta.tensor })
       return postprocess(out[s.outputNames[0]], meta, conf, classesAtivas)

@@ -17,7 +17,7 @@ const store = {
   },
   set cameras(v) { localStorage.setItem('cameras', JSON.stringify(v)) },
   get config() {
-    return Object.assign({ fpsMax: 15, confianca: 0.40, deteccao: true, som: true, webhook: '', osd: true }, JSON.parse(localStorage.getItem('config') || '{}'))
+    return Object.assign({ fpsMax: 15, confianca: 0.40, deteccao: true, som: true, webhook: '', osd: true, modoNoturno: 'auto' }, JSON.parse(localStorage.getItem('config') || '{}'))
   },
   set config(v) { localStorage.setItem('config', JSON.stringify(v)) },
   get alarmes() {
@@ -329,7 +329,7 @@ function iniciaDeteccao(video, overlay, card, cam) {
     if (video.readyState < 2 || document.hidden) return
     let dets = []
     if (cfg.deteccao) {
-      dets = await Detector.detect(video, cfg.confianca, null) || []
+      dets = await Detector.detect(video, cfg.confianca, null, cfg.modoNoturno) || []
       frames++
       rastreia(cam, dets)
       avaliaAlarmes(dets, cam)
@@ -533,6 +533,12 @@ function renderConfig(el) {
       <span class="cfg-value">${cfg.fpsMax}</span><input type="range" id="cfg-fps" min="1" max="30" value="${cfg.fpsMax}"></div>
     <div class="cfg-row"><span>Confiança Mínima</span>
       <span class="cfg-value">${Math.round(cfg.confianca * 100)}%</span><input type="range" id="cfg-conf" min="5" max="95" step="5" value="${cfg.confianca * 100}"></div>
+    <div class="cfg-row"><span>Modo noturno (realce de baixa luz antes do YOLO)</span>
+      <select id="cfg-noturno">
+        <option value="desligado" ${cfg.modoNoturno === 'desligado' ? 'selected' : ''}>Desligado</option>
+        <option value="auto" ${cfg.modoNoturno === 'auto' ? 'selected' : ''}>Auto (só cena escura)</option>
+        <option value="sempre" ${cfg.modoNoturno === 'sempre' ? 'selected' : ''}>Sempre</option>
+      </select></div>
     <div class="cfg-row"><span>Som de alarme</span>
       <input type="checkbox" id="cfg-som" ${cfg.som ? 'checked' : ''}></div>
     <div class="cfg-row"><span>OSD (relógio nos tiles)</span>
@@ -560,6 +566,7 @@ function renderConfig(el) {
     el.querySelector('#cfg-det').onchange = e => { upd('deteccao', e.target.checked); render() }
     el.querySelector('#cfg-fps').onchange = e => { upd('fpsMax', +e.target.value); render() }
     el.querySelector('#cfg-conf').onchange = e => { upd('confianca', e.target.value / 100); render() }
+    el.querySelector('#cfg-noturno').onchange = e => upd('modoNoturno', e.target.value)
     el.querySelector('#cfg-som').onchange = e => upd('som', e.target.checked)
     el.querySelector('#cfg-osd').onchange = e => upd('osd', e.target.checked)
     el.querySelector('#cfg-webhook').onchange = e => upd('webhook', e.target.value.trim())

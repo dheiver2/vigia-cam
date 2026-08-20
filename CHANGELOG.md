@@ -23,6 +23,12 @@ e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 - Relatórios de negócio por período com deltas corretos de contadores
   cumulativos (técnica de reset à la rate() do Prometheus).
 
+### Adicionado
+- Windows: modo noturno de detecção (Desligado/Auto/Sempre) no porte Electron
+  — mesmo realce de baixa luz antes do ONNX; zip da edição Windows voltou a
+  acompanhar a release (nota: a edição Windows tem escopo reduzido — sem
+  SQLite/LPR/mapa/auto-update do macOS).
+
 ### Alterado
 - App assinado com Developer ID + hardened runtime (antes ad-hoc): o Keychain
   para de pedir senha a cada atualização do app.

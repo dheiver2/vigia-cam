@@ -1,7 +1,7 @@
 {
   "name": "vigiacam-win",
   "productName": "VigiaCam",
-  "version": "2.1.0",
+  "version": "2.4.0",
   "description": "VIGIA·CAM — monitoramento de vídeo com IA 100% local (porte Windows)",
   "main": "main.js",
   "author": "Dheiver Santos",
