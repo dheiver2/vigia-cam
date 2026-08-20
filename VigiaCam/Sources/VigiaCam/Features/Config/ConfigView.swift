@@ -8,6 +8,8 @@ struct ConfigView: View {
     @State private var cameras: [Camera] = []
     @State private var showingAddCamera = false
     @State private var selectedTab = 0
+    @State private var modeloPreciso = ModelProvider.tipoAtivo == .geralPreciso
+    @State private var modoNoturno = NightBoost.modo
 
     var body: some View {
         VStack(spacing: 0) {
@@ -64,6 +66,28 @@ struct ConfigView: View {
                 configRow(title: "Confiança Mínima", value: String(format: "%.0f%%", config.confianca * 100)) { Slider(value: $config.confianca, in: 0.05...0.95, step: 0.05).tint(VigiaTheme.accent) }
                 configRow(title: "Resolução Inferência", value: "\(config.imgsz)px") { Stepper("", value: $config.imgsz, in: 96...1280, step: 32).labelsHidden() }
                 configRow(title: "Retenção (dias)", value: "\(config.retencaoDias)") { Stepper("", value: $config.retencaoDias, in: 1...365).labelsHidden() }
+                configRow(title: "Modelo de detecção",
+                          value: modeloPreciso ? "Preciso (v8s)" : "Rápido (v8n)") {
+                    Picker("", selection: Binding(
+                        get: { modeloPreciso },
+                        set: { ModelProvider.tipoAtivo = $0 ? .geralPreciso : .geral; modeloPreciso = $0 }
+                    )) {
+                        Text("Rápido — yolov8n").tag(false)
+                        Text("Preciso — yolov8s").tag(true)
+                    }.pickerStyle(.segmented).labelsHidden()
+                    Text("Medido neste Mac (CoreML/Neural Engine, bus.jpg): 4,6 ms/inferência no v8n vs 10,8 ms no v8s — o dobro do custo, mas ainda ~90 FPS de banda teórica. O v8s tem mais parâmetros e tende a captar melhor objetos pequenos/distantes.")
+                        .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
+                }
+                configRow(title: "Modo noturno (detecção)", value: modoNoturno.titulo) {
+                    Picker("", selection: Binding(
+                        get: { modoNoturno },
+                        set: { NightBoost.modo = $0; modoNoturno = $0 }
+                    )) {
+                        ForEach(NightBoost.Modo.allCases, id: \.self) { Text($0.titulo).tag($0) }
+                    }.pickerStyle(.segmented).labelsHidden()
+                    Text("Realce de baixa luz aplicado ao frame antes do YOLO (sombras + exposição + gamma + redução de ruído). Em \"Auto\", só entra quando a cena está escura de fato (luminância média < 25%) — de dia não custa nada.")
+                        .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
+                }
                 Button(action: { storage.salvarConfig(config.validated()) }) {
                     Text("Salvar").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
                         .frame(maxWidth: .infinity).padding(.vertical, 12)

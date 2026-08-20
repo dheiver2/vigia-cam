@@ -77,6 +77,9 @@ struct KPICardView: View {
     let value: String
     let icon: String
     let color: Color
+    /// Variação % vs período anterior (ex.: 7 dias atuais vs 7 anteriores).
+    /// `nil` = não mostra a comparação (uso ao vivo, sem janela selecionada).
+    var variacaoPct: Double? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -85,6 +88,14 @@ struct KPICardView: View {
                     .font(.system(size: 14))
                     .foregroundColor(color)
                 Spacer()
+                if let variacaoPct {
+                    HStack(spacing: 2) {
+                        Image(systemName: variacaoPct >= 0 ? "arrow.up.right" : "arrow.down.right")
+                        Text(String(format: "%.0f%%", abs(variacaoPct)))
+                    }
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(variacaoPct >= 0 ? VigiaTheme.ok : VigiaTheme.danger)
+                }
             }
             Text(value)
                 .font(.system(size: 24, weight: .bold, design: .rounded))

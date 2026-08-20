@@ -7,7 +7,34 @@ struct BusinessDashboardView: View {
     @State private var nicho: Nicho = .varejo
     @State private var aplicado: Nicho?
 
+    enum Janela: String, CaseIterable, Identifiable {
+        case aoVivo = "Ao vivo"
+        case dias7 = "7 dias"
+        case dias30 = "30 dias"
+        var id: String { rawValue }
+        var dias: Int? {   // nil = ao vivo (sem janela histórica)
+            switch self {
+            case .aoVivo: return nil
+            case .dias7: return 7
+            case .dias30: return 30
+            }
+        }
+    }
+    @State private var janela: Janela = .aoVivo
+
     private let cols = [GridItem(.adaptive(minimum: 200), spacing: 12)]
+
+    /// `nil` quando "Ao vivo" está selecionado — os KPIs seguem lendo direto
+    /// de `metrics.porCamera`, como sempre fizeram.
+    private var comparacao: (atual: BusinessMetricsService.Metrica, anterior: BusinessMetricsService.Metrica)? {
+        guard let dias = janela.dias else { return nil }
+        let agora = Date()
+        let inicioAtual = agora.addingTimeInterval(-Double(dias) * 86400)
+        let inicioAnterior = inicioAtual.addingTimeInterval(-Double(dias) * 86400)
+        let atual = EventStore.shared.somarPeriodo(desde: inicioAtual, ate: agora)
+        let anterior = EventStore.shared.somarPeriodo(desde: inicioAnterior, ate: inicioAtual)
+        return (atual, anterior)
+    }
 
     var body: some View {
         ScrollView {
@@ -47,11 +74,48 @@ struct BusinessDashboardView: View {
                         .font(.system(size: 12)).foregroundColor(VigiaTheme.ok)
                 }
 
+                // janela de comparação — "Ao vivo" preserva o comportamento de sempre
+                HStack {
+                    Text("Janela").font(.system(size: 12, weight: .semibold)).foregroundColor(VigiaTheme.muted)
+                    Picker("", selection: $janela) {
+                        ForEach(Janela.allCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented).labelsHidden().frame(width: 260)
+                    Spacer()
+                    if let dias = janela.dias {
+                        Text("vs \(dias) dias anteriores").font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
+                    }
+                }
+
                 // KPIs do nicho
                 LazyVGrid(columns: cols, spacing: 12) {
                     ForEach(nicho.kpis, id: \.self) { kpi in
-                        KPICardView(title: kpi, value: metrics.valor(kpi: kpi),
-                                    icon: iconeKPI(kpi), color: corKPI(kpi))
+                        if let comparacao {
+                            let r = metrics.valorComparado(kpi: kpi, atual: comparacao.atual, anterior: comparacao.anterior)
+                            KPICardView(title: kpi, value: r.atual, icon: iconeKPI(kpi), color: corKPI(kpi), variacaoPct: r.variacaoPct)
+                        } else {
+                            KPICardView(title: kpi, value: metrics.valor(kpi: kpi), icon: iconeKPI(kpi), color: corKPI(kpi))
+                        }
+                    }
+                }
+
+                // entregáveis recomendados p/ este nicho — orientação de uso dos
+                // recursos que já existem (Relatórios, detalhe da câmera), não
+                // atalho de navegação: evita acoplar este painel à navegação
+                // por abas do app.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Entregáveis recomendados para \(nicho.nome)")
+                        .font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                    ForEach(nicho.analiticosRecomendados) { item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: item.icone).font(.system(size: 13)).foregroundColor(VigiaTheme.accent)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.titulo).font(.system(size: 12, weight: .semibold)).foregroundColor(.white)
+                                Text(item.motivo).font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
+                            }
+                            Spacer()
+                        }
+                        .padding(10).background(VigiaTheme.card).clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
 

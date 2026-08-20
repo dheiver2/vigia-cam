@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.4.0] - 2026-08-19
+
+### Adicionado
+- Modo noturno de detecção (Desligado/Auto/Sempre): realce de baixa luz
+  (sombras + exposição + gamma + redução de ruído via Core Image) aplicado ao
+  frame antes do YOLO; em "Auto" só entra quando a luminância média da cena
+  cai abaixo de 25%.
+- Modelo "Preciso" (YOLOv8s) selecionável em Configurações, ao lado do v8n —
+  melhor recall em objetos pequenos/distantes (~2× o custo por inferência,
+  ainda folgado para 60 FPS).
+- Mapa de calor de circulação por câmera: overlay ao vivo e acumulado por
+  período (buckets persistidos no SQLite), reaproveitando as caixas do
+  detector — sem modelo novo.
+- Descoberta automática de câmeras ONVIF na rede (WS-Discovery) com
+  importação direta para a lista de câmeras.
+- Relatórios de negócio por período com deltas corretos de contadores
+  cumulativos (técnica de reset à la rate() do Prometheus).
+
+### Alterado
+- App assinado com Developer ID + hardened runtime (antes ad-hoc): o Keychain
+  para de pedir senha a cada atualização do app.
+
 ## [2.3.0] - 2026-08-05
 
 ### Adicionado

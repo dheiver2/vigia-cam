@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import CoreImage
 
 // Stub de Detection p/ testar o ObjectTracker isolado (o real vive em
 // DetectorService.swift, que importa Vision e não compila sem Xcode).
@@ -223,6 +224,38 @@ let k1 = CryptoService.loadOrCreateKey().withUnsafeBytes { Data($0) }
 let k2 = CryptoService.loadOrCreateKey().withUnsafeBytes { Data($0) }
 check(k1.count == 32, "chave tem 256 bits (\(k1.count * 8))")
 check(k1 == k2, "loadOrCreateKey() é estável (persistida no Keychain)")
+
+
+// MARK: - NightBoost (modo noturno de detecção)
+
+print("\n== NightBoost ==")
+func imagemUniforme(cinza: CGFloat) -> CGImage {
+    let ctx = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8,
+                        bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.setFillColor(CGColor(red: cinza, green: cinza, blue: cinza, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+    return ctx.makeImage()!
+}
+let escura = imagemUniforme(cinza: 0.05)
+let clara = imagemUniforme(cinza: 0.8)
+let lumEscura = NightBoost.luminanciaMedia(CIImage(cgImage: escura))
+let lumClara = NightBoost.luminanciaMedia(CIImage(cgImage: clara))
+check(lumEscura < NightBoost.limiarEscuro, "cena escura fica abaixo do limiar (\(lumEscura))")
+check(lumClara > NightBoost.limiarEscuro, "cena clara fica acima do limiar (\(lumClara))")
+
+let modoOriginal = NightBoost.modo
+NightBoost.modo = .desligado
+check(NightBoost.aplicarSeNecessario(escura) === escura, "desligado devolve o frame original")
+NightBoost.modo = .auto
+check(NightBoost.aplicarSeNecessario(clara) === clara, "auto não mexe em cena clara")
+let realcadaAuto = NightBoost.aplicarSeNecessario(escura)
+check(realcadaAuto !== escura, "auto realça cena escura")
+check(NightBoost.luminanciaMedia(CIImage(cgImage: realcadaAuto)) > lumEscura,
+      "realce aumenta a luminância da cena escura")
+NightBoost.modo = .sempre
+check(NightBoost.aplicarSeNecessario(clara) !== clara, "sempre realça mesmo cena clara")
+NightBoost.modo = modoOriginal
 
 print("\nResultado: \(passou) passaram, \(falhou) falharam")
 exit(falhou == 0 ? 0 : 1)

@@ -50,9 +50,9 @@ cat > VigiaCam.app/Contents/Info.plist << 'EOF'
     <key>CFBundleIdentifier</key>
     <string>com.vigiacam.app</string>
     <key>CFBundleVersion</key>
-    <string>2.3.0</string>
+    <string>2.4.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.3.0</string>
+    <string>2.4.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -73,8 +73,20 @@ cat > VigiaCam.app/Contents/Info.plist << 'EOF'
 </plist>
 EOF
 
-echo "🔏 Assinando (ad-hoc)..."
-codesign --force --deep --sign - VigiaCam.app
+# Assinatura ESTÁVEL (Developer ID > Apple Development > ad-hoc). Ad-hoc gera
+# uma assinatura diferente a cada build — o macOS trata cada versão como um app
+# novo e o Keychain volta a pedir senha para a chave AES a cada atualização.
+IDENTIDADE=$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+if [ -z "$IDENTIDADE" ]; then
+    IDENTIDADE=$(security find-identity -v -p codesigning | grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"')
+fi
+if [ -n "$IDENTIDADE" ]; then
+    echo "🔏 Assinando com: $IDENTIDADE"
+    codesign --force --deep --options runtime --sign "$IDENTIDADE" VigiaCam.app
+else
+    echo "🔏 Assinando (ad-hoc — nenhuma identidade encontrada)..."
+    codesign --force --deep --sign - VigiaCam.app
+fi
 
 echo "✅ Done! Opening VigiaCam..."
 echo "(build ok — não abrindo automaticamente)"

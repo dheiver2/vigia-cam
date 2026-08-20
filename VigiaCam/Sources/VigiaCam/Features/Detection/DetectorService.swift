@@ -15,12 +15,20 @@ extension Notification.Name {
 /// vocabulário COCO (ex. EPI) precisam de um modelo diferente, não só de um
 /// filtro de classes sobre o modelo geral.
 enum TipoModelo: String, CaseIterable {
-    case geral   // yolov8n.mlpackage — 80 classes COCO
-    case ppe     // ppe.mlpackage — Hardhat/NO-Hardhat/Safety Vest/NO-Safety Vest/Person/...
+    case geral         // yolov8n.mlpackage — 80 classes COCO, otimizado p/ velocidade
+    /// yolov8s.mlpackage — mesmo vocabulário COCO do `.geral`, mais parâmetros
+    /// (11,2M vs 3,2M). Medido neste Mac (CoreML/Neural Engine, ComputeUnit.ALL,
+    /// bus.jpg 640×640): 4,6ms/inferência (v8n) vs 10,8ms/inferência (v8s) — o
+    /// dobro do custo, mas ainda ~90 FPS de banda teórica por câmera, bem acima
+    /// do teto de `AppConfig.fpsMax` (60). Compensa em objeto pequeno/distante,
+    /// onde o v8n perde recall.
+    case geralPreciso
+    case ppe           // ppe.mlpackage — Hardhat/NO-Hardhat/Safety Vest/NO-Safety Vest/Person/...
 
     var arquivo: String {
         switch self {
         case .geral: return "yolov8n"
+        case .geralPreciso: return "yolov8s"
         case .ppe: return "ppe"
         }
     }
@@ -42,9 +50,16 @@ enum ModelProvider {
 
     /// Modelo ativo no app inteiro. Trocar isto dispara `.modeloAtivoMudou`
     /// para que cada `DetectorService` (um por card de câmera) recarregue.
-    static var tipoAtivo: TipoModelo = .geral {
+    /// Persiste a escolha entre `.geral`/`.geralPreciso` (e o que a última
+    /// aplicação de nicho tiver deixado) entre execuções — sem isso a escolha
+    /// de "modelo preciso" na tela de Configurações voltava ao padrão a cada
+    /// abertura do app.
+    private static let chaveDefaults = "tipoModeloAtivo"
+
+    static var tipoAtivo: TipoModelo = TipoModelo(rawValue: UserDefaults.standard.string(forKey: chaveDefaults) ?? "") ?? .geral {
         didSet {
             guard oldValue != tipoAtivo else { return }
+            UserDefaults.standard.set(tipoAtivo.rawValue, forKey: chaveDefaults)
             NotificationCenter.default.post(name: .modeloAtivoMudou, object: nil)
         }
     }
@@ -206,9 +221,11 @@ final class DetectorService: ObservableObject {
     }
 
     func detectar(_ image: NSImage) -> [Detection] {
-        guard let vnModel, let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        guard let vnModel, let cgOriginal = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             return []
         }
+        // Modo noturno: realce de baixa luz antes da inferência (ver NightBoost).
+        let cgImage = NightBoost.aplicarSeNecessario(cgOriginal)
 
         // Use VNCoreMLRequest — it handles imageType input automatically
         let request = VNCoreMLRequest(model: vnModel)

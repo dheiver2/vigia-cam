@@ -7,6 +7,8 @@ struct CameraDetailView: View {
     @ObservedObject private var privacy = PrivacyService.shared
     @ObservedObject private var analitico = AnalyticsConfigService.shared
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var heatmap = HeatmapService.shared
+    @State private var mostrarHeatmap = false
     @State private var editandoPrivacidade = false
     @State private var arrasto: CGRect?
     // edição de analítico de negócio
@@ -19,6 +21,8 @@ struct CameraDetailView: View {
     @State private var ptzBase: CGFloat = 1
     @State private var ptzPan: CGSize = .zero
     @State private var ptzPanBase: CGSize = .zero
+    // PTZ ONVIF (motor real da câmera, quando ela anuncia o serviço)
+    @State private var ptzOnvifOcupado = false
 
     init(camera: Camera) {
         self.camera = camera
@@ -59,6 +63,7 @@ struct CameraDetailView: View {
                                 PrivacyMaskOverlay(cameraURL: camera.url,
                                                    imageSize: img.size, contentMode: .fit))
                             .overlay(analiticoOverlay(imageSize: img.size))
+                            .overlay(heatmapOverlay(imageSize: img.size))
                             .overlay(editorPrivacidade(imageSize: img.size))
                             .overlay(editorAnalitico(imageSize: img.size))
                             // PTZ digital: zoom (scroll/±) + pan (arraste) quando ampliado
@@ -68,6 +73,7 @@ struct CameraDetailView: View {
                             .gesture(ptzGesture, including: (editandoPrivacidade || modo != .nenhum) ? .subviews : .all)
                             .clipped()
                             .overlay(alignment: .bottomLeading) { if ptzZoom > 1.01 { ptzControles } }
+                            .overlay(alignment: .topTrailing) { ptzOnvifControles.padding(12) }
                     } else {
                         VStack(spacing: 12) {
                             ProgressView().tint(VigiaTheme.accent)
@@ -91,6 +97,11 @@ struct CameraDetailView: View {
                     if !privacy.zonasDe(camera.url).isEmpty {
                         acao("arrow.uturn.backward", "Desfazer", VigiaTheme.muted) { privacy.removerUltima(camera.url) }
                         acao("trash", "Limpar zonas", VigiaTheme.danger) { privacy.limpar(camera.url) }
+                    }
+                    acao(mostrarHeatmap ? "flame.fill" : "flame",
+                         "Mapa de calor",
+                         mostrarHeatmap ? VigiaTheme.warning : VigiaTheme.text) {
+                        mostrarHeatmap.toggle()
                     }
                     Divider().frame(height: 20)
                     // analítico de negócio
@@ -216,6 +227,33 @@ struct CameraDetailView: View {
         }.allowsHitTesting(false)
     }
 
+    /// Grade "ao vivo" (desde o último drenar, ≈1×/min) sobre o vídeo — onde
+    /// no quadro os objetos detectados vêm aparecendo mais.
+    @ViewBuilder
+    private func heatmapOverlay(imageSize: CGSize) -> some View {
+        if mostrarHeatmap, let grade = heatmap.grades[camera.nome] {
+            GeometryReader { geo in
+                let r = fittedRect(container: geo.size, image: imageSize, mode: .fit)
+                let maximo = grade.max() ?? 0
+                let cw = r.width / CGFloat(HeatmapService.colunas)
+                let ch = r.height / CGFloat(HeatmapService.linhas)
+                ZStack {
+                    ForEach(0..<grade.count, id: \.self) { i in
+                        let valor = grade[i]
+                        if valor > 0 {
+                            let col = i % HeatmapService.colunas
+                            let linha = i / HeatmapService.colunas
+                            Rectangle()
+                                .fill(HeatmapService.cor(valor: valor, maximo: maximo))
+                                .frame(width: cw, height: ch)
+                                .position(x: r.minX + (CGFloat(col) + 0.5) * cw, y: r.minY + (CGFloat(linha) + 0.5) * ch)
+                        }
+                    }
+                }
+            }.allowsHitTesting(false)
+        }
+    }
+
     /// Captura o arrasto para criar a linha ou a zona.
     @ViewBuilder
     private func editorAnalitico(imageSize: CGSize) -> some View {
@@ -295,6 +333,71 @@ struct CameraDetailView: View {
     private func ajustarZoom(_ d: CGFloat) {
         ptzZoom = min(max(1, ptzZoom + d), 6); ptzBase = ptzZoom
         if ptzZoom <= 1.01 { ptzPan = .zero; ptzPanBase = .zero }
+    }
+
+    // MARK: - PTZ ONVIF (motor real da câmera)
+    //
+    // Só aparece se a câmera foi cadastrada via `OnvifDiscoverySheet` e o
+    // dispositivo anunciou o serviço PTZ em `GetCapabilities` — câmeras fixas
+    // (a maioria) simplesmente não têm `onvifPTZXAddr` preenchido.
+    // Cada toque manda `ContinuousMove` e para sozinho após um pulso curto:
+    // mais simples e mais robusto que "segurar para mover" em SwiftUI/AppKit,
+    // que exigiria tratar drag-down/drag-up nesse mesmo botão.
+
+    private var ptzOnvifDisponivel: Bool { camera.onvifPTZXAddr != nil && camera.onvifProfileToken != nil }
+
+    @ViewBuilder
+    private var ptzOnvifControles: some View {
+        if ptzOnvifDisponivel {
+            VStack(spacing: 6) {
+                Text("PTZ").font(.system(size: 9, weight: .bold)).foregroundColor(VigiaTheme.muted)
+                botaoPTZOnvif("arrow.up") { onvifMover(pan: 0, tilt: 0.6) }
+                HStack(spacing: 4) {
+                    botaoPTZOnvif("arrow.left") { onvifMover(pan: -0.6, tilt: 0) }
+                    botaoPTZOnvif("stop.fill") { onvifParar() }
+                    botaoPTZOnvif("arrow.right") { onvifMover(pan: 0.6, tilt: 0) }
+                }
+                botaoPTZOnvif("arrow.down") { onvifMover(pan: 0, tilt: -0.6) }
+                HStack(spacing: 4) {
+                    botaoPTZOnvif("plus.magnifyingglass") { onvifMover(pan: 0, tilt: 0, zoom: 0.6) }
+                    botaoPTZOnvif("minus.magnifyingglass") { onvifMover(pan: 0, tilt: 0, zoom: -0.6) }
+                }
+            }
+            .padding(8).background(Color.black.opacity(0.55)).clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func botaoPTZOnvif(_ icone: String, _ ação: @escaping () -> Void) -> some View {
+        Button(action: ação) {
+            Image(systemName: icone).font(.system(size: 11, weight: .bold))
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain).foregroundColor(.white)
+        .background(Color.white.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 6))
+        .disabled(ptzOnvifOcupado)
+        .opacity(ptzOnvifOcupado ? 0.5 : 1)
+    }
+
+    private func onvifMover(pan: Double, tilt: Double, zoom: Double = 0) {
+        guard let xAddrStr = camera.onvifPTZXAddr, let xAddr = URL(string: xAddrStr),
+              let token = camera.onvifProfileToken,
+              let usuario = camera.onvifUsuario, let senha = camera.onvifSenha else { return }
+        ptzOnvifOcupado = true
+        let client = OnvifClient(deviceXAddr: xAddr, usuario: usuario, senha: senha)
+        Task {
+            try? await client.ptzMover(ptzXAddr: xAddr, profileToken: token, panX: pan, tiltY: tilt, zoom: zoom)
+            try? await Task.sleep(nanoseconds: 400_000_000)   // pulso curto — mais previsível que "segurar" no botão
+            try? await client.ptzParar(ptzXAddr: xAddr, profileToken: token)
+            await MainActor.run { ptzOnvifOcupado = false }
+        }
+    }
+
+    private func onvifParar() {
+        guard let xAddrStr = camera.onvifPTZXAddr, let xAddr = URL(string: xAddrStr),
+              let token = camera.onvifProfileToken,
+              let usuario = camera.onvifUsuario, let senha = camera.onvifSenha else { return }
+        let client = OnvifClient(deviceXAddr: xAddr, usuario: usuario, senha: senha)
+        Task { try? await client.ptzParar(ptzXAddr: xAddr, profileToken: token) }
     }
 
     private func acao(_ icon: String, _ titulo: String, _ cor: Color, _ f: @escaping () -> Void) -> some View {

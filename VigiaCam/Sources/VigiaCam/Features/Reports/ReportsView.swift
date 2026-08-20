@@ -11,6 +11,9 @@ struct ReportsView: View {
     @State private var dias = 7
     @State private var gerando = false
     @State private var ultimoPDF: URL?
+    @State private var tabelaCSV: EventStore.TabelaExport = .eventos
+    @State private var exportandoCSV = false
+    @State private var ultimoCSV: URL?
 
     private let storage = StorageService.shared
 
@@ -43,6 +46,39 @@ struct ReportsView: View {
                     }
                 }
 
+                // Exportação CSV (para BI/Excel externo — Power Query, Metabase, Grafana...)
+                painel(titulo: "Exportar dados (CSV)", icon: "tablecells") {
+                    HStack(spacing: 12) {
+                        Picker("", selection: $tabelaCSV) {
+                            ForEach(EventStore.TabelaExport.allCases) { Text($0.titulo).tag($0) }
+                        }.labelsHidden().frame(width: 220)
+                        Stepper("Últimos \(dias) dia(s)", value: $dias, in: 1...90)
+                            .foregroundColor(VigiaTheme.text)
+                        Spacer()
+                        Button {
+                            exportarCSV()
+                        } label: {
+                            HStack { Image(systemName: "square.and.arrow.up"); Text(exportandoCSV ? "Exportando…" : "Exportar CSV") }
+                        }.buttonStyle(.borderedProminent).tint(VigiaTheme.accent2).disabled(exportandoCSV)
+                    }
+                    if let csv = ultimoCSV {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal.fill").foregroundColor(VigiaTheme.ok)
+                            Text(csv.lastPathComponent).font(.system(size: 11)).foregroundColor(VigiaTheme.muted)
+                            Spacer()
+                            Button("Mostrar no Finder") { NSWorkspace.shared.activateFileViewerSelecting([csv]) }
+                                .buttonStyle(.plain).foregroundColor(VigiaTheme.accent2)
+                        }
+                    }
+                    Text("Gera um .csv com colunas prontas pra abrir no Excel/Numbers ou apontar um BI externo (Power Query, Metabase, Grafana) pra pasta de eventos.")
+                        .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
+                }
+
+                // Mapa de calor acumulado
+                painel(titulo: "Mapa de calor (acumulado)", icon: "flame") {
+                    HeatmapAcumuladoView(cameras: storage.carregarCameras())
+                }
+
                 // Atalhos p/ pastas de evidência
                 painel(titulo: "Pastas de evidência", icon: "folder.fill") {
                     pastaLinha("Gravações (clipes)", storage.dirGravacoes, "film")
@@ -71,6 +107,19 @@ struct ReportsView: View {
             ultimoPDF = ReportService.gerarPDF(eventos: eventService.eventos, periodo: periodo,
                                                usuario: usuario, cameras: totalCameras)
             gerando = false
+        }
+    }
+
+    private func exportarCSV() {
+        exportandoCSV = true
+        let inicio = Calendar.current.date(byAdding: .day, value: -(dias - 1), to: Date()) ?? Date()
+        let tabela = tabelaCSV
+        DispatchQueue.global(qos: .userInitiated).async {
+            let url = EventStore.shared.exportarCSV(tabela: tabela, desde: inicio, ate: Date())
+            DispatchQueue.main.async {
+                ultimoCSV = url
+                exportandoCSV = false
+            }
         }
     }
 

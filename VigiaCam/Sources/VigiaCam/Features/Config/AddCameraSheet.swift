@@ -19,6 +19,7 @@ struct AddCameraSheet: View {
     @State private var url = ""
     @State private var categoria = "Outras"
     @FocusState private var focado: Campo?
+    @State private var mostrarDescobertaOnvif = false
 
     private var urlLimpa: String { url.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var duplicada: Bool { existentes.contains(urlLimpa) }
@@ -42,6 +43,20 @@ struct AddCameraSheet: View {
             campo("Nome", text: $nome, id: .nome)
             campo("URL (rtsp:// ou https://...)", text: $url, id: .url)
             campo("Categoria", text: $categoria, id: .categoria)
+            Button(action: { mostrarDescobertaOnvif = true }) {
+                Label("Descobrir na rede (ONVIF)", systemImage: "wifi.circle")
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(VigiaTheme.accent)
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+            }.buttonStyle(.plain)
+            .sheet(isPresented: $mostrarDescobertaOnvif) {
+                OnvifDiscoverySheet(
+                    onCancel: { mostrarDescobertaOnvif = false },
+                    onResolved: { camera in
+                        mostrarDescobertaOnvif = false
+                        onAdd(camera)
+                    }
+                )
+            }
             if let aviso {
                 Text(aviso)
                     .font(.system(size: 11)).foregroundColor(VigiaTheme.danger)

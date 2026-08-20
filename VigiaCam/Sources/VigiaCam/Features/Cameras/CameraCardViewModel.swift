@@ -87,6 +87,14 @@ class CameraCardViewModel: ObservableObject {
             }
             .store(in: &bag)
 
+        // detecção -> mapa de calor (onde no quadro os objetos aparecem)
+        detector.$lastDetections
+            .sink { [weak self] dets in
+                guard let self else { return }
+                HeatmapService.shared.registrar(camera: self.camera.nome, deteccoes: dets)
+            }
+            .store(in: &bag)
+
         // frame -> gravação (quando a câmera está gravando)
         cameraService.$currentFrame
             .compactMap { $0 }
@@ -214,11 +222,18 @@ class CameraCardViewModel: ObservableObject {
         // Série temporal persistida (1 amostra/min por câmera) — destrava
         // relatório histórico; antes as métricas morriam com a sessão.
         if displayTick % 900 == 0 {
+            let unicos = tracker.unicosPorClasse
             EventStore.shared.registrarMetrica(
                 camera: camera.nome,
                 entradas: lineCounter.totalEntradas, saidas: lineCounter.totalSaidas,
                 ocupacao: zoneMonitor.ocupacao.values.reduce(0, +),
-                intrusoes: intrusoesTotal, permanencias: permanenciasTotal)
+                intrusoes: intrusoesTotal, permanencias: permanenciasTotal,
+                pessoasUnicas: (unicos["person"] ?? 0) + (unicos["Person"] ?? 0),
+                veiculosUnicas: ["car", "truck", "bus", "motorcycle", "bicycle"].reduce(0) { $0 + (unicos[$1] ?? 0) })
+            if let grade = HeatmapService.shared.drenar(camera: camera.nome) {
+                EventStore.shared.registrarHeatmap(camera: camera.nome, colunas: HeatmapService.colunas,
+                                                    linhas: HeatmapService.linhas, grade: grade)
+            }
         }
     }
 

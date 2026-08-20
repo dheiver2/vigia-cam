@@ -71,6 +71,65 @@ enum Nicho: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Fora dos KPIs em destaque, quais dos OUTROS entregáveis analíticos do
+    /// app (heatmap, LPR, CSV, comparação de período, PDF) mais importam pra
+    /// esse nicho — orientação de uso, não um recurso novo: cada um já existe
+    /// em outra tela (Relatórios / detalhe da câmera), só não havia nenhuma
+    /// indicação de qual deles vale a pena olhar em cada vertical.
+    struct AnaliticoRecomendado: Identifiable {
+        let icone: String
+        let titulo: String
+        let motivo: String
+        var id: String { titulo }
+    }
+
+    var analiticosRecomendados: [AnaliticoRecomendado] {
+        switch self {
+        case .varejo:
+            return [
+                .init(icone: "flame", titulo: "Mapa de calor",
+                      motivo: "Achar zona morta vs. zona quente na loja (Relatórios → Mapa de calor)"),
+                .init(icone: "chart.line.uptrend.xyaxis", titulo: "Comparação de período",
+                      motivo: "Footfall desta semana vs. semana passada"),
+            ]
+        case .transito:
+            return [
+                .init(icone: "tablecells", titulo: "Exportar CSV",
+                      motivo: "Alimentar BI de mobilidade/trânsito (Relatórios → Exportar CSV)"),
+                .init(icone: "text.viewfinder", titulo: "LPR — leitura de placas",
+                      motivo: "Identificar veículos específicos no fluxo"),
+            ]
+        case .industria:
+            return [
+                .init(icone: "chart.line.uptrend.xyaxis", titulo: "Comparação de período",
+                      motivo: "Tendência de intrusões/permanências ao longo do tempo"),
+                .init(icone: "doc.richtext", titulo: "Relatório PDF",
+                      motivo: "Evidência documentada para SST/compliance"),
+            ]
+        case .perimetro:
+            return [
+                .init(icone: "flame", titulo: "Mapa de calor",
+                      motivo: "Pontos de invasão recorrentes no perímetro"),
+                .init(icone: "text.viewfinder", titulo: "LPR — leitura de placas",
+                      motivo: "Registrar veículos suspeitos que se aproximam"),
+            ]
+        case .estacionamento:
+            return [
+                .init(icone: "chart.line.uptrend.xyaxis", titulo: "Comparação de período",
+                      motivo: "Rotatividade de vagas semana a semana"),
+                .init(icone: "text.viewfinder", titulo: "LPR — leitura de placas",
+                      motivo: "Controle de acesso por placa"),
+            ]
+        case .canteiroDeObras:
+            return [
+                .init(icone: "doc.richtext", titulo: "Relatório PDF",
+                      motivo: "Conformidade de EPI documentada para auditoria"),
+                .init(icone: "chart.line.uptrend.xyaxis", titulo: "Comparação de período",
+                      motivo: "Tendência de conformidade (sem capacete/colete) ao longo do tempo"),
+            ]
+        }
+    }
+
     /// KPIs destacados no painel de negócio deste nicho.
     var kpis: [String] {
         switch self {

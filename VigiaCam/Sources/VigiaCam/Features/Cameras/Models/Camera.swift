@@ -16,6 +16,20 @@ struct Camera: Codable, Identifiable, Hashable {
     var latitude: Double?
     var longitude: Double?
 
+    // MARK: - ONVIF (opcional)
+    //
+    // Preenchidos quando a câmera foi cadastrada via descoberta ONVIF
+    // (`OnvifDiscoverySheet`). `onvifPTZXAddr` só existe se o dispositivo
+    // anunciou o serviço PTZ em `GetCapabilities` — sua ausência é o sinal
+    // usado pela UI pra decidir se mostra os controles de PTZ.
+    // Persistidos junto do resto de `cameras.json`, que já é gravado
+    // cifrado (AES-GCM) por `StorageService.salvarJSONCriptografado`.
+    var onvifXAddr: String? = nil
+    var onvifPTZXAddr: String? = nil
+    var onvifProfileToken: String? = nil
+    var onvifUsuario: String? = nil
+    var onvifSenha: String? = nil
+
     /// Derivado do esquema da URL — não é mais um campo solto que podia
     /// contradizer o endereço (`tipo: .hls` com `url: "rtsp://…"`).
     var tipo: CameraType { CameraType(url: url) }
@@ -76,7 +90,10 @@ struct Camera: Codable, Identifiable, Hashable {
 
     // MARK: - Codable (compatível com o formato antigo)
 
-    private enum CodingKeys: String, CodingKey { case id, nome, categoria, url, latitude, longitude }
+    private enum CodingKeys: String, CodingKey {
+        case id, nome, categoria, url, latitude, longitude
+        case onvifXAddr, onvifPTZXAddr, onvifProfileToken, onvifUsuario, onvifSenha
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -89,7 +106,17 @@ struct Camera: Codable, Identifiable, Hashable {
         categoria = (try? c.decode(String.self, forKey: .categoria)) ?? Self.categoriaPadrao
         latitude = try? c.decode(Double.self, forKey: .latitude)
         longitude = try? c.decode(Double.self, forKey: .longitude)
+        onvifXAddr = try? c.decode(String.self, forKey: .onvifXAddr)
+        onvifPTZXAddr = try? c.decode(String.self, forKey: .onvifPTZXAddr)
+        onvifProfileToken = try? c.decode(String.self, forKey: .onvifProfileToken)
+        onvifUsuario = try? c.decode(String.self, forKey: .onvifUsuario)
+        onvifSenha = try? c.decode(String.self, forKey: .onvifSenha)
     }
+
+    /// Sintetizado automaticamente pelo compilador a partir de `CodingKeys`
+    /// (todo campo tem case correspondente) — só existe `init(from:)` custom
+    /// aqui por causa da migração de formato antigo, então o `encode(to:)`
+    /// sintetizado grava os campos ONVIF como `nil` até serem preenchidos.
 
     // MARK: - Agrupamento
 
