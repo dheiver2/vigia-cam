@@ -62,6 +62,18 @@ enum CamerasSeed {
         Linha(nome: "NY Southern Tier, câmera R6-017", categoria: "Southern Tier (NY)", url: "\(nysdot)/R6_017/playlist.m3u8"),
         Linha(nome: "NY Southern Tier, câmera R6-019", categoria: "Southern Tier (NY)", url: "\(nysdot)/R6_019/playlist.m3u8"),
 
+        // São Paulo — Via Dutra (BR-116), câmeras públicas da concessionária
+        // CCR RioSP (rodovias.grupoccr.com.br/riosp/cameras-ao-vivo). HLS via
+        // CloudFront; verificadas em 30/ago/2026. Trecho paulista da rodovia.
+        Linha(nome: "SP, Dutra km 78 — Roseira", categoria: "São Paulo (Via Dutra)", url: "https://d3b8201cy0qzzb.cloudfront.net/out/v1/db7ff89ac2dc4a2fa37f763f27429d86/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 100 — Taubaté", categoria: "São Paulo (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/e324b6a41320417c9e63b06835fd3a5f/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 156 — São José dos Campos", categoria: "São Paulo (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/0fc685c0aa5c468687bbd6c0f751edd6/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 160 — Jacareí", categoria: "São Paulo (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/776fef1557fd49569d4528f0f41fcf98/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 202 — Arujá", categoria: "São Paulo (Via Dutra)", url: "https://d3b8201cy0qzzb.cloudfront.net/out/v1/f7d3e1cb49d04cd9a8f4d18c17cb4d1f/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 210 — Guarulhos", categoria: "São Paulo (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/3cda6b49f31b4e129cb917f78bf36c26/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 225 — Guarulhos", categoria: "São Paulo (Via Dutra)", url: "https://d3b8201cy0qzzb.cloudfront.net/out/v1/4bd31ad7560846e08093f9552f92a8d0/CMAF_HLS/index.m3u8"),
+        Linha(nome: "SP, Dutra km 230 — São Paulo", categoria: "São Paulo (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/e664a9b9ae1d4de38ac33c70857a1371/CMAF_HLS/index.m3u8"),
+
         // Trânsito / Demo (DOT público) — câmeras de trânsito de DOTs estaduais
         // dos EUA. NÃO são câmeras de canteiro de obra: servem só para
         // demonstrar uma fonte HLS pública no nicho "Canteiro de Obras / EPI",
