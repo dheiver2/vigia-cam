@@ -169,6 +169,9 @@ enum Nicho: String, CaseIterable, Identifiable {
 
     /// Aplica o pacote: troca o modelo CoreML ativo (se necessário), substitui
     /// as regras de alarme e fixa as classes do nicho.
+    /// Fase 2 (modelo por câmera): isto define o modelo GLOBAL (default).
+    /// Câmeras com `modeloDeteccao` fixado no CameraDetailView ignoram esta
+    /// troca — o override por câmera vence o preset.
     func aplicar() {
         ModelProvider.tipoAtivo = modelo
         if let cat = categoriaCamera { CameraFilterStore.shared.categoria = cat }

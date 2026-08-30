@@ -15,8 +15,11 @@ class CameraCardViewModel: ObservableObject {
     @Published var inalcancavel = false                // desistiu de reconectar
 
     let camera: Camera
+    /// Modelo fixado nesta câmera (`nil` = segue o global). Publicado para o
+    /// seletor do CameraDetailView refletir a escolha.
+    @Published var modeloFixo: TipoModelo?
     private let cameraService = CameraService()
-    private let detector = DetectorService()
+    private let detector: DetectorService
     private let tracker = ObjectTracker()
     private let lineCounter = LineCounter()
     private let zoneMonitor = ZoneMonitor()
@@ -37,6 +40,9 @@ class CameraCardViewModel: ObservableObject {
 
     init(camera: Camera) {
         self.camera = camera
+        let fixo = camera.modeloDeteccao.flatMap(TipoModelo.init(rawValue:))
+        self.modeloFixo = fixo
+        self.detector = DetectorService(tipo: fixo)
         detector.confidenceThreshold = appConfig.confianca
         detector.allowedClasses = appConfig.classesMonitoradas
         cameraService.$currentFrame.assign(to: &$frameImage)
@@ -103,6 +109,18 @@ class CameraCardViewModel: ObservableObject {
                 RecordingService.shared.alimentar(self.camera.nome, image: img)
             }
             .store(in: &bag)
+    }
+
+    /// Fixa (ou libera, com `nil`) o modelo de detecção desta câmera e
+    /// persiste a escolha em cameras.json. O detector recarrega na hora.
+    func definirModelo(_ tipo: TipoModelo?) {
+        modeloFixo = tipo
+        detector.fixarTipo(tipo)
+        var lista = StorageService.shared.carregarCameras()
+        if let i = lista.firstIndex(where: { $0.id == camera.id }) {
+            lista[i].modeloDeteccao = tipo?.rawValue
+            StorageService.shared.salvarCameras(lista)
+        }
     }
 
     /// Snapshot do frame atual como evidência (PNG + cadeia de custódia).

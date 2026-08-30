@@ -31,6 +31,34 @@ struct CameraDetailView: View {
 
     private var gravando: Bool { rec.estaGravando(camera.nome) }
 
+    /// Modelo de detecção desta câmera: "Padrão" segue o global (que o preset
+    /// de nicho controla); fixar um tipo aqui vence o global só nesta câmera.
+    private var seletorModelo: some View {
+        Menu {
+            Button(action: { vm.definirModelo(nil) }) {
+                if vm.modeloFixo == nil { Image(systemName: "checkmark") }
+                Text("Padrão — \(ModelProvider.tipoAtivo.rotulo)")
+            }
+            Divider()
+            ForEach(TipoModelo.allCases, id: \.self) { tipo in
+                Button(action: { vm.definirModelo(tipo) }) {
+                    if vm.modeloFixo == tipo { Image(systemName: "checkmark") }
+                    Text(tipo.rotulo)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "brain")
+                Text(vm.modeloFixo?.rotulo ?? "Padrão")
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(vm.modeloFixo == nil ? VigiaTheme.muted : VigiaTheme.accent2)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Modelo de detecção desta câmera (Padrão = segue a configuração global)")
+    }
+
     var body: some View {
         ZStack {
             VigiaTheme.bg.ignoresSafeArea()
@@ -43,6 +71,7 @@ struct CameraDetailView: View {
                     Text(camera.nome).font(.system(size: 16, weight: .bold)).foregroundColor(.white)
                     Spacer()
                     HStack(spacing: 8) {
+                        seletorModelo
                         if gravando { RecBadge() }
                         if vm.isOnline { LiveBadge() } else { OfflineBadge() }
                         FPSCaption(fps: vm.fps)

@@ -16,6 +16,12 @@ struct Camera: Codable, Identifiable, Hashable {
     var latitude: Double?
     var longitude: Double?
 
+    /// Modelo de detecção fixado PARA ESTA câmera (`TipoModelo.rawValue`).
+    /// `nil` = seguir o modelo global (`ModelProvider.tipoAtivo`), que os
+    /// presets de nicho continuam controlando. Optional para que cameras.json
+    /// antigos decodifiquem sem migração.
+    var modeloDeteccao: String? = nil
+
     // MARK: - ONVIF (opcional)
     //
     // Preenchidos quando a câmera foi cadastrada via descoberta ONVIF

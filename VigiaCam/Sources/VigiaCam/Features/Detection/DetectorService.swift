@@ -32,6 +32,15 @@ enum TipoModelo: String, CaseIterable {
         case .ppe: return "ppe"
         }
     }
+
+    /// Nome exibido nos seletores de modelo (Config global e por câmera).
+    var rotulo: String {
+        switch self {
+        case .geral: return "Rápido (v8n)"
+        case .geralPreciso: return "Preciso (11s)"
+        case .ppe: return "EPI (canteiro)"
+        }
+    }
 }
 
 /// Carrega e compila o modelo YOLO ativo UMA ÚNICA vez por tipo, para todo o app.
@@ -192,11 +201,20 @@ final class DetectorService: ObservableObject {
     /// saída do modelo (0..9) — confirmada via `model.names` no export ultralytics.
     static let ppeLabels = ClassesEPI.nomes
 
-    /// Labels do modelo ATUALMENTE ativo (`ModelProvider.tipoAtivo`) — não é
-    /// mais sempre `cocoLabels`, porque nichos como Canteiro de Obras usam um
+    /// Modelo fixado PARA ESTA instância (Fase 2: modelo por câmera).
+    /// `nil` = seguir o global (`ModelProvider.tipoAtivo`), comportamento de
+    /// sempre. Quando fixado, a instância ignora `modeloAtivoMudou` — o preset
+    /// de nicho troca só o default; o override da câmera vence.
+    private(set) var tipoFixo: TipoModelo?
+
+    /// O tipo que esta instância efetivamente usa agora.
+    var tipoEfetivo: TipoModelo { tipoFixo ?? ModelProvider.tipoAtivo }
+
+    /// Labels do modelo EFETIVO desta instância — não é mais sempre
+    /// `cocoLabels`, porque nichos como Canteiro de Obras usam um
     /// `.mlpackage` diferente com vocabulário próprio.
     private var labels: [String] {
-        ModelProvider.tipoAtivo == .ppe ? Self.ppeLabels : Self.cocoLabels
+        tipoEfetivo == .ppe ? Self.ppeLabels : Self.cocoLabels
     }
 
     private static let palette: [Color] = [
@@ -208,7 +226,8 @@ final class DetectorService: ObservableObject {
         palette[abs(label.hashValue) % palette.count]
     }
 
-    init() {
+    init(tipo: TipoModelo? = nil) {
+        self.tipoFixo = tipo
         loadModel()
         NotificationCenter.default.addObserver(
             self, selector: #selector(modeloMudou),
@@ -219,6 +238,18 @@ final class DetectorService: ObservableObject {
     deinit { NotificationCenter.default.removeObserver(self) }
 
     @objc private func modeloMudou() {
+        guard tipoFixo == nil else { return }   // câmera com modelo fixo ignora o global
+        recarregar()
+    }
+
+    /// Fixa (ou libera, com `nil`) o modelo desta instância e recarrega.
+    func fixarTipo(_ tipo: TipoModelo?) {
+        guard tipo != tipoFixo else { return }
+        tipoFixo = tipo
+        recarregar()
+    }
+
+    private func recarregar() {
         vnModel = nil
         detectionCount = [:]
         lastDetections = []
@@ -226,7 +257,7 @@ final class DetectorService: ObservableObject {
     }
 
     private func loadModel() {
-        let tipo = ModelProvider.tipoAtivo
+        let tipo = tipoEfetivo
         queue.async { [weak self] in
             guard let self else { return }
             switch ModelProvider.shared(tipo: tipo) {
