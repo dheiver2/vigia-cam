@@ -74,6 +74,41 @@ enum CamerasSeed {
         Linha(nome: "SP, Dutra km 225 — Guarulhos", categoria: "São Paulo (Via Dutra)", url: "https://d3b8201cy0qzzb.cloudfront.net/out/v1/4bd31ad7560846e08093f9552f92a8d0/CMAF_HLS/index.m3u8"),
         Linha(nome: "SP, Dutra km 230 — São Paulo", categoria: "São Paulo (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/e664a9b9ae1d4de38ac33c70857a1371/CMAF_HLS/index.m3u8"),
 
+        // Rio de Janeiro — Via Dutra (BR-116), trecho fluminense (CCR RioSP).
+        Linha(nome: "RJ, Dutra km 224 — Paracambi", categoria: "Rio de Janeiro (Via Dutra)", url: "https://dlziwpy8wmigq.cloudfront.net/out/v1/4e01de7aff184385a6a4cff8524c742f/CMAF_HLS/index.m3u8"),
+        Linha(nome: "RJ, Dutra km 315 — Itatiaia", categoria: "Rio de Janeiro (Via Dutra)", url: "https://d3b8201cy0qzzb.cloudfront.net/out/v1/12d7e2e551894165a5e2d08fc2b58b20/CMAF_HLS/index.m3u8"),
+
+        // Espírito Santo — câmeras de surf de Guarapari (OndasOnline, Wowza
+        // logicahost aberto). "Praia do Buraco" é HEVC — fica de fora até
+        // validar o decode no pipeline.
+        Linha(nome: "ES, Guarapari — Praia D'Ulé (Escolinha)", categoria: "Espírito Santo (Guarapari)", url: "https://video02.logicahost.com.br/ledrusso/escolinha.stream/playlist.m3u8"),
+        Linha(nome: "ES, Guarapari — Praia D'Ulé (1ª Entrada)", categoria: "Espírito Santo (Guarapari)", url: "https://video02.logicahost.com.br/ledrusso/primeiraentrada.stream/playlist.m3u8"),
+        Linha(nome: "ES, Guarapari — Praia D'Ulé (Pico da Belina)", categoria: "Espírito Santo (Guarapari)", url: "https://video02.logicahost.com.br/ledrusso/picodabelina.stream/playlist.m3u8"),
+
+        // Paraná — Guaratuba (Grupo Litorânea, logicahost).
+        Linha(nome: "PR, Guaratuba — Praia de Caieiras (ponte)", categoria: "Paraná (Guaratuba)", url: "https://video02.logicahost.com.br/camlitoranea/caieirasponte.stream/playlist.m3u8"),
+        Linha(nome: "PR, Guaratuba — Trevo do Coroados (PR-412)", categoria: "Paraná (Guaratuba)", url: "https://video02.logicahost.com.br/camlitoranea/coroados.stream/playlist.m3u8"),
+
+        // Santa Catarina — BNU.tv (Blumenau/região, Wowza streamlock).
+        Linha(nome: "SC, Blumenau — BNU.tv feed 1", categoria: "Santa Catarina (Blumenau)", url: "https://5a8d73edc0407.streamlock.net:443/bnutv200/bnutv20005.stream/playlist.m3u8"),
+        Linha(nome: "SC, Blumenau — BNU.tv feed 2", categoria: "Santa Catarina (Blumenau)", url: "https://5a8d73edc0407.streamlock.net:443/bnutv200/bnutv20007.stream/playlist.m3u8"),
+
+        // Rio Grande do Sul — Torres (torresaovivo.com.br, logicahost).
+        // 36 câmeras verificadas na cidade; seleção de 12 representativas
+        // (orla, trânsito, aeroporto) para não inundar o videowall.
+        Linha(nome: "RS, Torres — Quatro Praças", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/quatropraca/quatropraca/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Av. Beira Mar, Praia Grande II", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/praiagrande/praiagrande/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Praia dos Molhes", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/molhes/molhes/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Morro da Guarita", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/morrodaguarita/morrodaguarita/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Orla Gastronômica", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/orlagastronomica1/orlagastronomica1/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Praça Pinheiro Machado", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/pracapinheiro/pracapinheiro/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Rótula do Balão", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/rotulabalao/rotulabalao/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Rótula Itapeva x Estrada do Mar", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/itapeva/itapeva/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Aeroporto, Pátio Norte", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/aeropationorte/aeropationorte/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Ponte Pênsil", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/pensil/pensil/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Prainha", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/prainha/prainha/playlist.m3u8"),
+        Linha(nome: "RS, Torres — Panorâmica Ilha dos Lobos", categoria: "Rio Grande do Sul (Torres)", url: "https://video02.logicahost.com.br/ilhalobo/ilhalobo/playlist.m3u8"),
+
         // Trânsito / Demo (DOT público) — câmeras de trânsito de DOTs estaduais
         // dos EUA. NÃO são câmeras de canteiro de obra: servem só para
         // demonstrar uma fonte HLS pública no nicho "Canteiro de Obras / EPI",
