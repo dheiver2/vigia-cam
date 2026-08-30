@@ -22,6 +22,11 @@ struct Camera: Codable, Identifiable, Hashable {
     /// antigos decodifiquem sem migração.
     var modeloDeteccao: String? = nil
 
+    /// Modelo ESPECIALISTA em cascata (`TipoModelo.rawValue`, ex. EPI): roda
+    /// sobre o mesmo frame sempre que o modelo principal detectar um gatilho
+    /// (pessoa/veículo). `nil` = sem cascata. Fase 3 do plano de precisão.
+    var modeloCascata: String? = nil
+
     // MARK: - ONVIF (opcional)
     //
     // Preenchidos quando a câmera foi cadastrada via descoberta ONVIF

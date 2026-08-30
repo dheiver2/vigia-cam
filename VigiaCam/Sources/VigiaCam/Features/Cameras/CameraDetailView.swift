@@ -46,6 +46,21 @@ struct CameraDetailView: View {
                     Text(tipo.rotulo)
                 }
             }
+            Divider()
+            // Cascata (Fase 3): especialista que roda sobre o mesmo frame
+            // quando o principal detecta pessoa/veículo.
+            Menu("Cascata de especialista") {
+                Button(action: { vm.definirCascata(nil) }) {
+                    if vm.modeloCascata == nil { Image(systemName: "checkmark") }
+                    Text("Desligada")
+                }
+                ForEach(TipoModelo.allCases, id: \.self) { tipo in
+                    Button(action: { vm.definirCascata(tipo) }) {
+                        if vm.modeloCascata == tipo { Image(systemName: "checkmark") }
+                        Text(tipo.rotulo)
+                    }
+                }
+            }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "brain")

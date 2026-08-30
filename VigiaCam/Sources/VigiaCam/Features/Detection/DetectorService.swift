@@ -23,12 +23,18 @@ enum TipoModelo: String, CaseIterable {
     /// equilíbrio, com 36MB (v8s tinha 43MB). Compensa em objeto pequeno/
     /// distante, onde o v8n perde recall.
     case geralPreciso
+    /// yolo11s960.mlpackage — mesmos pesos do `.geralPreciso`, entrada 960px
+    /// em vez de 640. ~2,2× o custo por inferência; recupera recall de objetos
+    /// pequenos/distantes (rodovia, orla) que somem a 640. Fase 3 do plano de
+    /// precisão — usar só em câmeras marcadas, não no videowall inteiro.
+    case precisoLongo
     case ppe           // ppe.mlpackage — Hardhat/NO-Hardhat/Safety Vest/NO-Safety Vest/Person/...
 
     var arquivo: String {
         switch self {
         case .geral: return "yolov8n"
         case .geralPreciso: return "yolo11s"
+        case .precisoLongo: return "yolo11s960"
         case .ppe: return "ppe"
         }
     }
@@ -38,6 +44,7 @@ enum TipoModelo: String, CaseIterable {
         switch self {
         case .geral: return "Rápido (v8n)"
         case .geralPreciso: return "Preciso (11s)"
+        case .precisoLongo: return "Longa distância (960px)"
         case .ppe: return "EPI (canteiro)"
         }
     }
@@ -73,10 +80,16 @@ enum ModelProvider {
         }
     }
 
-    /// Resolução de entrada REAL do modelo, lida do próprio `.mlmodel` ao carregar
-    /// (em vez de assumir 640 fixo no parsing do output — se o modelo mudar de
-    /// resolução um dia, o parsing não quebra silenciosamente).
-    private(set) static var inputSize: CGFloat = 640
+    /// Resolução de entrada REAL de cada modelo, lida do próprio `.mlmodel` ao
+    /// carregar. POR TIPO desde a Fase 3: com modelos de resoluções diferentes
+    /// ativos ao mesmo tempo (640 no videowall, 960 numa câmera de longa
+    /// distância), um único valor global fazia o letterbox do parsing usar o
+    /// tamanho do último modelo carregado — caixas deslocadas na outra câmera.
+    private(set) static var inputSizes: [TipoModelo: CGFloat] = [:]
+    static func inputSize(_ tipo: TipoModelo) -> CGFloat {
+        lock.lock(); defer { lock.unlock() }
+        return inputSizes[tipo] ?? 640
+    }
 
     static func shared(tipo: TipoModelo = tipoAtivo) -> Estado {
         lock.lock(); defer { lock.unlock() }
@@ -139,7 +152,7 @@ enum ModelProvider {
             let ml = try MLModel(contentsOf: compiladoURL, configuration: cfg)
             if let imgInput = ml.modelDescription.inputDescriptionsByName.values.first(where: { $0.type == .image }),
                let constraint = imgInput.imageConstraint {
-                inputSize = CGFloat(constraint.pixelsWide)
+                inputSizes[tipo] = CGFloat(constraint.pixelsWide)
                 print("[Detector] resolução de entrada do modelo: \(Int(constraint.pixelsWide))x\(Int(constraint.pixelsHigh))")
             }
             let vn = try VNCoreMLModel(for: ml)
@@ -330,23 +343,29 @@ final class DetectorService: ObservableObject {
 
     private func parseYOLOOutput(_ mlArray: MLMultiArray, origW: CGFloat, origH: CGFloat) -> [Detection] {
         let ptr = mlArray.dataPointer.bindMemory(to: Float32.self, capacity: mlArray.count)
-        let count = mlArray.count
-        // YOLOv8: output [1, 4+numClasses, numDetections] ou [4+numClasses, numDetections]
-        // Layout: (4+numClasses) rows × numDetections cols
-        // Rows 0-3: cx, cy, w, h
-        // Rows 4..(4+numClasses-1): class scores
-        // numClasses varia por modelo ativo (80 no geral, 10 no de EPI) — não é
-        // mais fixo em 84/80, senão o parsing quebra ao trocar de `.mlpackage`.
+        // YOLOv8/11: output [1, 4+numClasses, numDetections] ou [4+numClasses, numDetections]
+        // Rows 0-3: cx, cy, w, h; rows 4..: class scores.
+        // numClasses varia por modelo ativo (80 no geral, 10 no de EPI).
+        //
+        // IMPORTANTE: indexar via `strides`, não assumindo array contíguo
+        // (`r*numDetections+i`). Com grades maiores (entrada 960 → 18900
+        // detecções) o CoreML devolve o MLMultiArray com stride de linha
+        // MAIOR que numDetections (padding de alinhamento) — a aritmética
+        // contígua lia w/h da linha errada e as caixas saíam infladas.
         let numClasses = labels.count
-        let numDetections = count / (4 + numClasses)
-        guard numDetections > 0 else { return [] }
+        let dims = mlArray.shape.count
+        let numDetections = mlArray.shape[dims - 1].intValue
+        let strideLinha = mlArray.strides[dims - 2].intValue
+        let strideCol = mlArray.strides[dims - 1].intValue
+        guard numDetections > 0, mlArray.shape[dims - 2].intValue == 4 + numClasses else { return [] }
+        @inline(__always) func v(_ linha: Int, _ i: Int) -> Float32 { ptr[linha * strideLinha + i * strideCol] }
 
         // Compensação do letterbox (.scaleFit): o frame original (origW×origH,
         // geralmente 16:9) foi redimensionado preservando proporção e
         // centralizado dentro do quadrado N×N do modelo, sobrando faixas de
         // padding. Sem desfazer isso aqui, os boxes saem deslocados/menores
         // que o objeto real assim que a câmera não é quadrada.
-        let n = CGFloat(ModelProvider.inputSize)
+        let n = ModelProvider.inputSize(tipoEfetivo)
         let escala = min(n / max(origW, 1), n / max(origH, 1))
         let novaW = origW * escala, novaH = origH * escala
         let padX = (n - novaW) / 2, padY = (n - novaH) / 2
@@ -359,15 +378,15 @@ final class DetectorService: ObservableObject {
         var candidates: [(label: String, confidence: Float, box: CGRect)] = []
 
         for i in 0..<numDetections {
-            let cxM = CGFloat(ptr[0 * numDetections + i])
-            let cyM = CGFloat(ptr[1 * numDetections + i])
-            let wM  = CGFloat(ptr[2 * numDetections + i])
-            let hM  = CGFloat(ptr[3 * numDetections + i])
+            let cxM = CGFloat(v(0, i))
+            let cyM = CGFloat(v(1, i))
+            let wM  = CGFloat(v(2, i))
+            let hM  = CGFloat(v(3, i))
 
             var bestScore: Float = 0
             var bestClass = -1
             for c in 0..<numClasses {
-                let score = ptr[(4 + c) * numDetections + i]
+                let score = v(4 + c, i)
                 if score > bestScore {
                     bestScore = score
                     bestClass = c
@@ -398,6 +417,13 @@ final class DetectorService: ObservableObject {
                 box: CGRect(x: x1, y: y1, width: bw, height: bh)))
         }
 
+        if ProcessInfo.processInfo.environment["VIGIA_DEBUG_PARSE"] != nil {
+            print("[ParseDebug] n=\(n) orig=\(origW)x\(origH) pad=\(padX),\(padY)")
+            for c in candidates.sorted(by: { $0.confidence > $1.confidence }).prefix(4) {
+                let b = c.box
+                print("[ParseDebug] \(c.label) \(c.confidence) px=(\(Int(b.minX * origW)),\(Int((1 - b.maxY) * origH))) \(Int(b.width * origW))x\(Int(b.height * origH))")
+            }
+        }
         print("[Detector] Raw candidates: \(candidates.count)")
         let result = nms(candidates)
         print("[Detector] After NMS: \(result.count)")

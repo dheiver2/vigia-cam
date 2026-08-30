@@ -18,8 +18,15 @@ class CameraCardViewModel: ObservableObject {
     /// Modelo fixado nesta câmera (`nil` = segue o global). Publicado para o
     /// seletor do CameraDetailView refletir a escolha.
     @Published var modeloFixo: TipoModelo?
+    /// Especialista em cascata (`nil` = desligada). Publicado p/ o seletor.
+    @Published var modeloCascata: TipoModelo?
     private let cameraService = CameraService()
     private let detector: DetectorService
+    private var detectorCascata: DetectorService?
+    /// Classes do modelo principal que disparam a segunda passada do
+    /// especialista — pessoa e veículos cobrem os casos EPI/placa/perímetro.
+    private static let classesGatilho: Set<String> =
+        ["person", "car", "truck", "bus", "motorcycle", "bicycle"]
     private let tracker = ObjectTracker()
     private let lineCounter = LineCounter()
     private let zoneMonitor = ZoneMonitor()
@@ -43,6 +50,10 @@ class CameraCardViewModel: ObservableObject {
         let fixo = camera.modeloDeteccao.flatMap(TipoModelo.init(rawValue:))
         self.modeloFixo = fixo
         self.detector = DetectorService(tipo: fixo)
+        if let cascata = camera.modeloCascata.flatMap(TipoModelo.init(rawValue:)) {
+            self.modeloCascata = cascata
+            self.detectorCascata = DetectorService(tipo: cascata)
+        }
         detector.confidenceThreshold = appConfig.confianca
         detector.allowedClasses = appConfig.classesMonitoradas
         cameraService.$currentFrame.assign(to: &$frameImage)
@@ -119,6 +130,17 @@ class CameraCardViewModel: ObservableObject {
         var lista = StorageService.shared.carregarCameras()
         if let i = lista.firstIndex(where: { $0.id == camera.id }) {
             lista[i].modeloDeteccao = tipo?.rawValue
+            StorageService.shared.salvarCameras(lista)
+        }
+    }
+
+    /// Liga/desliga a cascata de especialista desta câmera e persiste.
+    func definirCascata(_ tipo: TipoModelo?) {
+        modeloCascata = tipo
+        detectorCascata = tipo.map { DetectorService(tipo: $0) }
+        var lista = StorageService.shared.carregarCameras()
+        if let i = lista.firstIndex(where: { $0.id == camera.id }) {
+            lista[i].modeloCascata = tipo?.rawValue
             StorageService.shared.salvarCameras(lista)
         }
     }
@@ -270,7 +292,18 @@ class CameraCardViewModel: ObservableObject {
             self.isDetecting = true
             guard let copy = frame.copy() as? NSImage else { self.isDetecting = false; return }
             DispatchQueue.global(qos: .userInitiated).async {
-                _ = self.detector.detectar(copy)
+                let dets = self.detector.detectar(copy)
+                // Cascata (Fase 3): pessoa/veículo no frame → o especialista
+                // roda no MESMO frame e as detecções extras (vocabulário
+                // próprio, ex. NO-Hardhat) entram no fluxo publicado — tracker,
+                // alarmes e analíticos as veem como qualquer outra classe.
+                if let dc = self.detectorCascata,
+                   dets.contains(where: { Self.classesGatilho.contains($0.label) }) {
+                    let extras = dc.detectar(copy)
+                    if !extras.isEmpty {
+                        DispatchQueue.main.async { self.lastDetections.append(contentsOf: extras) }
+                    }
+                }
                 self.isDetecting = false
             }
         }

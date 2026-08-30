@@ -10,3 +10,8 @@ yolov8n.onnx
 
 # Artefatos de release
 *.zip
+
+# Fine-tuning (dados locais, nunca versionar)
+finetune/dataset/
+finetune/runs/
+finetune/*.pt
