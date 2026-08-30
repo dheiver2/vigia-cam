@@ -23,6 +23,12 @@ jobs:
         working-directory: VigiaCam
         run: ./run_tests.sh
 
+      - name: Métricas de detecção (eval COCO, 52 classes)
+        working-directory: VigiaCam
+        env:
+          VIGIA_CHAVE_TESTE: "1"   # chave em memória — runner não tem Keychain interativo
+        run: .build/release/VigiaCam --eval ../Tests-fixtures/coco
+
       - name: Suíte XCTest (Crypto/RBAC/Storage/Camera/Alarmes)
         working-directory: VigiaCam
         continue-on-error: true   # best-effort: pode falhar em runner sem Keychain

@@ -16,19 +16,19 @@ extension Notification.Name {
 /// filtro de classes sobre o modelo geral.
 enum TipoModelo: String, CaseIterable {
     case geral         // yolov8n.mlpackage — 80 classes COCO, otimizado p/ velocidade
-    /// yolov8s.mlpackage — mesmo vocabulário COCO do `.geral`, mais parâmetros
-    /// (11,2M vs 3,2M). Medido neste Mac (CoreML/Neural Engine, ComputeUnit.ALL,
-    /// bus.jpg 640×640): 4,6ms/inferência (v8n) vs 10,8ms/inferência (v8s) — o
-    /// dobro do custo, mas ainda ~90 FPS de banda teórica por câmera, bem acima
-    /// do teto de `AppConfig.fpsMax` (60). Compensa em objeto pequeno/distante,
-    /// onde o v8n perde recall.
+    /// yolo11s.mlpackage — mesmo vocabulário COCO do `.geral` e mesmo formato
+    /// de saída [84,8400] (o parse não muda). Substituiu o yolov8s em ago/2026:
+    /// no eval COCO de 12 imagens/52 classes deste repo (Tests-fixtures/coco),
+    /// v8n = 60% P / 47% R, v8s = 51% P / 59% R, 11s = 57% P / 57% R — melhor
+    /// equilíbrio, com 36MB (v8s tinha 43MB). Compensa em objeto pequeno/
+    /// distante, onde o v8n perde recall.
     case geralPreciso
     case ppe           // ppe.mlpackage — Hardhat/NO-Hardhat/Safety Vest/NO-Safety Vest/Person/...
 
     var arquivo: String {
         switch self {
         case .geral: return "yolov8n"
-        case .geralPreciso: return "yolov8s"
+        case .geralPreciso: return "yolo11s"
         case .ppe: return "ppe"
         }
     }
@@ -157,7 +157,17 @@ final class DetectorService: ObservableObject {
     var allowedClasses: Set<String>?
     /// Limiares por classe (ex.: classes com mais falso-positivo podem exigir
     /// confiança maior). `nil`/ausente na classe = usa `confidenceThreshold`.
-    var perClassThresholds: [String: Float] = [:]
+    var perClassThresholds: [String: Float] = DetectorService.limiaresCalibrados
+
+    /// Calibração ago/2026 a partir do eval COCO (Tests-fixtures/coco, 12
+    /// imagens / 52 classes): classes que geraram falso-positivo em série nos
+    /// dois modelos COCO (confusão chair↔couch, knife↔spoon, e caixas
+    /// frouxas de handbag/remote) exigem confiança maior que o global.
+    /// Mexeu aqui? Rode `VigiaCam --eval Tests-fixtures/coco` e compare o TOTAL.
+    static let limiaresCalibrados: [String: Float] = [
+        "chair": 0.35, "knife": 0.45, "spoon": 0.40, "remote": 0.40,
+        "wine glass": 0.35, "handbag": 0.35,
+    ]
     private let iouThreshold: Float = 0.45
     /// Threshold usado só para JUNTAR candidatos antes da NMS/fusão — mais
     /// baixo que `confidenceThreshold` para não descartar cedo demais uma

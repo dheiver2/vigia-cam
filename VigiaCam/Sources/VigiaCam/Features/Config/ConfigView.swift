@@ -67,15 +67,15 @@ struct ConfigView: View {
                 configRow(title: "Resolução Inferência", value: "\(config.imgsz)px") { Stepper("", value: $config.imgsz, in: 96...1280, step: 32).labelsHidden() }
                 configRow(title: "Retenção (dias)", value: "\(config.retencaoDias)") { Stepper("", value: $config.retencaoDias, in: 1...365).labelsHidden() }
                 configRow(title: "Modelo de detecção",
-                          value: modeloPreciso ? "Preciso (v8s)" : "Rápido (v8n)") {
+                          value: modeloPreciso ? "Preciso (11s)" : "Rápido (v8n)") {
                     Picker("", selection: Binding(
                         get: { modeloPreciso },
                         set: { ModelProvider.tipoAtivo = $0 ? .geralPreciso : .geral; modeloPreciso = $0 }
                     )) {
                         Text("Rápido — yolov8n").tag(false)
-                        Text("Preciso — yolov8s").tag(true)
+                        Text("Preciso — yolo11s").tag(true)
                     }.pickerStyle(.segmented).labelsHidden()
-                    Text("Medido neste Mac (CoreML/Neural Engine, bus.jpg): 4,6 ms/inferência no v8n vs 10,8 ms no v8s — o dobro do custo, mas ainda ~90 FPS de banda teórica. O v8s tem mais parâmetros e tende a captar melhor objetos pequenos/distantes.")
+                    Text("No eval COCO do repo (12 imagens, 52 classes): v8n 60% precisão / 47% recall; yolo11s 57% / 57% — melhor equilíbrio, custo ~2× por inferência. O yolo11s capta melhor objetos pequenos/distantes.")
                         .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
                 }
                 configRow(title: "Modo noturno (detecção)", value: modoNoturno.titulo) {
