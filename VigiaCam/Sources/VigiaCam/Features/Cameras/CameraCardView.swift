@@ -6,7 +6,11 @@ struct CameraCardView: View {
     var videoHeight: CGFloat? = 140
     var compacto: Bool = false
     var osd: Bool = false                 // legenda sobreposta (nome + hora)
-    @StateObject private var vm: CameraCardViewModel
+    @StateObject private var holder: CameraSessionHolder
+    /// Sessão compartilhada da câmera (ver CameraSessions): o card não é mais
+    /// dono do VM, então abrir o detalhe não duplica stream nem derruba
+    /// gravação/evidência do card ao fechar.
+    private var vm: CameraCardViewModel { holder.vm }
     @ObservedObject private var rec = RecordingService.shared
     @State private var isHovered = false
     @State private var showingDetail = false
@@ -17,7 +21,7 @@ struct CameraCardView: View {
         self.videoHeight = videoHeight
         self.compacto = compacto
         self.osd = osd
-        _vm = StateObject(wrappedValue: CameraCardViewModel(camera: camera))
+        _holder = StateObject(wrappedValue: CameraSessionHolder(camera: camera))
     }
 
     private var gravando: Bool { rec.estaGravando(camera.nome) }
@@ -161,8 +165,6 @@ struct CameraCardView: View {
         .contentShape(Rectangle())
         .onTapGesture { showingDetail = true }
         .onHover { hovering in withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering } }
-        .onAppear { vm.start() }
-        .onDisappear { vm.stop() }
         .sheet(isPresented: $showingDetail) {
             CameraDetailView(camera: camera)
         }

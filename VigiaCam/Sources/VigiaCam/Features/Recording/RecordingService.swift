@@ -9,6 +9,9 @@ final class RecordingService: ObservableObject {
 
     /// Câmeras que estão gravando agora (por nome) — dirige o indicador ● REC.
     @Published var gravando: Set<String> = []
+    /// Última falha de gravação (disco cheio, writer inválido). A UI observa
+    /// para avisar — antes esses erros sumiam e a gravação parecia bem.
+    @Published var ultimoErro: String?
 
     private let storage = StorageService.shared
     private var writers: [String: ClipWriter] = [:]
@@ -50,7 +53,13 @@ final class RecordingService: ObservableObject {
         let url = storage.caminhoGravacao(camera: camera)
         fila.async { [weak self] in
             guard let self else { return }
-            guard let w = ClipWriter(url: url, size: tamanho, fps: fps) else { return }
+            guard let w = ClipWriter(url: url, size: tamanho, fps: fps) else {
+                // Antes isto era um `return` mudo: o ● REC não acendia e nada
+                // explicava por quê.
+                DispatchQueue.main.async { self.ultimoErro = "Não foi possível iniciar a gravação de \(camera)." }
+                self.storage.auditar("gravacao_falha", detalhe: "camera=\(camera) writer não pôde ser criado", usuario: self.usuario)
+                return
+            }
             self.writers[camera] = w
             DispatchQueue.main.async { self.gravando.insert(camera) }
             self.storage.auditar("gravacao_iniciada", detalhe: "camera=\(camera)", usuario: self.usuario)
@@ -61,8 +70,15 @@ final class RecordingService: ObservableObject {
         fila.async { [weak self] in
             guard let self, let w = self.writers[camera] else { return }
             let url = w.url
-            w.finalizar { [weak self] in
+            w.finalizar { [weak self] erro in
                 guard let self else { return }
+                if let erro {
+                    // Não registra na cadeia de custódia um arquivo que o
+                    // próprio AVFoundation diz estar inválido.
+                    DispatchQueue.main.async { self.ultimoErro = "Gravação de \(camera) falhou: \(erro)" }
+                    self.storage.auditar("gravacao_falha", detalhe: "camera=\(camera) erro=\(erro)", usuario: self.usuario)
+                    return
+                }
                 _ = self.storage.registrarCadeia(arquivo: url.path, tipo: "gravacao", camera: camera, usuario: self.usuario)
                 self.storage.auditar("gravacao_finalizada", detalhe: "camera=\(camera) arquivo=\(url.lastPathComponent)", usuario: self.usuario)
             }
@@ -75,7 +91,15 @@ final class RecordingService: ObservableObject {
     func alimentar(_ camera: String, image: NSImage) {
         fila.async { [weak self] in
             guard let self, let w = self.writers[camera] else { return }
-            w.acrescentar(self.comCarimbo(image, camera: camera))
+            guard w.acrescentar(self.comCarimbo(image, camera: camera)) else {
+                // Disco cheio é o caso típico: encerra em vez de seguir
+                // alimentando um writer morto por horas.
+                let motivo = w.erro ?? "escrita recusada (disco cheio?)"
+                DispatchQueue.main.async { self.ultimoErro = "Gravação de \(camera) interrompida: \(motivo)" }
+                self.storage.auditar("gravacao_falha", detalhe: "camera=\(camera) erro=\(motivo)", usuario: self.usuario)
+                self.pararGravacao(camera)
+                return
+            }
         }
     }
 
@@ -130,20 +154,37 @@ private final class ClipWriter {
         self.writer = writer
     }
 
-    func acrescentar(_ image: NSImage) {
+    /// `false` quando o writer falhou (disco cheio, permissão) — o chamador
+    /// precisa parar a gravação em vez de seguir alimentando um arquivo morto.
+    /// Antes o retorno de `append` e o `writer.status` eram ignorados: com o
+    /// disco cheio o indicador ● REC continuava aceso e a cadeia de custódia
+    /// registrava como evidência um arquivo corrompido.
+    @discardableResult
+    func acrescentar(_ image: NSImage) -> Bool {
         if !iniciado {
             writer.startWriting(); writer.startSession(atSourceTime: .zero); iniciado = true
         }
-        guard input.isReadyForMoreMediaData, let pb = pixelBuffer(from: image) else { return }
+        if writer.status == .failed { return false }
+        guard input.isReadyForMoreMediaData, let pb = pixelBuffer(from: image) else { return true }
         let t = CMTime(value: frameIndex, timescale: Int32(fps))
-        adaptor.append(pb, withPresentationTime: t)
+        guard adaptor.append(pb, withPresentationTime: t) else { return false }
         frameIndex += 1
+        return true
     }
 
-    func finalizar(_ done: @escaping () -> Void) {
-        guard iniciado else { done(); return }
+    /// Erro do writer, quando houver (para auditoria/mensagem ao usuário).
+    var erro: String? {
+        writer.status == .failed ? (writer.error?.localizedDescription ?? "writer falhou") : nil
+    }
+
+    /// `done(nil)` = arquivo íntegro; `done(erro)` = MP4 inválido.
+    func finalizar(_ done: @escaping (String?) -> Void) {
+        guard iniciado else { done("gravação sem nenhum frame"); return }
         input.markAsFinished()
-        writer.finishWriting(completionHandler: done)
+        let w = writer
+        w.finishWriting {
+            done(w.status == .completed ? nil : (w.error?.localizedDescription ?? "falha ao finalizar"))
+        }
     }
 
     private func pixelBuffer(from image: NSImage) -> CVPixelBuffer? {

@@ -2,7 +2,10 @@ import SwiftUI
 
 struct CameraDetailView: View {
     let camera: Camera
-    @StateObject private var vm: CameraCardViewModel
+    @StateObject private var holder: CameraSessionHolder
+    /// Mesma sessão do card do videowall (ver CameraSessions) — antes o
+    /// detalhe criava um segundo VM para a mesma câmera.
+    private var vm: CameraCardViewModel { holder.vm }
     @ObservedObject private var rec = RecordingService.shared
     @ObservedObject private var privacy = PrivacyService.shared
     @ObservedObject private var analitico = AnalyticsConfigService.shared
@@ -26,7 +29,7 @@ struct CameraDetailView: View {
 
     init(camera: Camera) {
         self.camera = camera
-        _vm = StateObject(wrappedValue: CameraCardViewModel(camera: camera))
+        _holder = StateObject(wrappedValue: CameraSessionHolder(camera: camera))
     }
 
     private var gravando: Bool { rec.estaGravando(camera.nome) }
@@ -231,8 +234,6 @@ struct CameraDetailView: View {
                 }.foregroundColor(VigiaTheme.muted).padding(12).background(VigiaTheme.panel)
             }
         }
-        .onAppear { vm.start() }
-        .onDisappear { vm.stop() }
         // Esc fecha o detalhe. Sem isto o único jeito de sair era acertar a
         // setinha no canto, e a tela ficava presa sobre o videowall.
         .background(

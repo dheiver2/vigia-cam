@@ -334,55 +334,69 @@ final class StorageService: ObservableObject {
         ==========================
         """
 
-        // Write ZIP contents to temp then move
+        // Monta o pacote num diretório temporário e o compacta com `ditto`,
+        // o mesmo utilitário que o build.sh usa para gerar o zip de release.
+        // Antes esta função criava um DIRETÓRIO chamado "evidencia-…" e o
+        // chamava de ZIP (o comentário original admitia isso), e todas as
+        // cópias usavam `try?`: falha nenhuma chegava a quem exportou.
         let tmpDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try? fileManager.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        let pacote = tmpDir.appendingPathComponent("evidencia-\(slug(camera))-\(timestamp)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tmpDir) }   // não deixa lixo no /tmp
 
-        let file1 = tmpDir.appendingPathComponent(base)
-        let file2 = tmpDir.appendingPathComponent("metadados.json")
-        let file3 = tmpDir.appendingPathComponent("cadeia_custodia.json")
-        let file4 = tmpDir.appendingPathComponent("assinatura.txt")
+        let destino = dirCapturas.appendingPathComponent("evidencia-\(slug(camera))-\(timestamp).zip")
+        do {
+            try fileManager.createDirectory(at: pacote, withIntermediateDirectories: true)
+            try fileManager.copyItem(at: URL(fileURLWithPath: arquivo), to: pacote.appendingPathComponent(base))
+            let metaData = try JSONSerialization.data(withJSONObject: metadados, options: .prettyPrinted)
+            try metaData.write(to: pacote.appendingPathComponent("metadados.json"))
+            let cadeiaData = try JSONSerialization.data(withJSONObject: registro, options: .prettyPrinted)
+            try cadeiaData.write(to: pacote.appendingPathComponent("cadeia_custodia.json"))
+            try assinatura.data(using: .utf8)?.write(to: pacote.appendingPathComponent("assinatura.txt"))
 
-        try? fileManager.copyItem(at: URL(fileURLWithPath: arquivo), to: file1)
-        if let metaData = try? JSONSerialization.data(withJSONObject: metadados, options: .prettyPrinted) {
-            try? metaData.write(to: file2)
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            p.arguments = ["-c", "-k", "--keepParent", pacote.path, destino.path]
+            try p.run()
+            p.waitUntilExit()
+            guard p.terminationStatus == 0 else {
+                auditar("exportar_evidencia_falha", detalhe: "arquivo=\(base) ditto=\(p.terminationStatus)")
+                return nil
+            }
+        } catch {
+            auditar("exportar_evidencia_falha", detalhe: "arquivo=\(base) erro=\(error.localizedDescription)")
+            return nil
         }
-        if let cadeiaData = try? JSONSerialization.data(withJSONObject: registro, options: .prettyPrinted) {
-            try? cadeiaData.write(to: file3)
-        }
-        try? assinatura.data(using: .utf8)?.write(to: file4)
 
-        // Create ZIP
-        // Note: actual ZIP creation requires compression framework
-        // For now, copy the file and metadata to a .zip-named directory
-        // In production, use a ZIP library or libcompression
-        let evidenceDir = dirCapturas.appendingPathComponent("evidencia-\(camera)-\(timestamp)")
-        try? fileManager.createDirectory(at: evidenceDir, withIntermediateDirectories: true)
-        try? fileManager.copyItem(at: URL(fileURLWithPath: arquivo), to: evidenceDir.appendingPathComponent(base))
-        try? fileManager.copyItem(at: file2, to: evidenceDir.appendingPathComponent("metadados.json"))
-        try? fileManager.copyItem(at: file3, to: evidenceDir.appendingPathComponent("cadeia_custodia.json"))
-        try? fileManager.copyItem(at: file4, to: evidenceDir.appendingPathComponent("assinatura.txt"))
-
-        auditar("exportar_evidencia", detalhe: "arquivo=\(base) camera=\(camera)")
-        return evidenceDir
+        auditar("exportar_evidencia", detalhe: "arquivo=\(base) camera=\(camera) zip=\(destino.lastPathComponent)")
+        return destino
     }
 
     // MARK: - Retention Cleanup
 
+    @discardableResult
     func limparRetencao(dias: Int) -> Int {
         let fileManager = FileManager.default
         let cutoff = Date().addingTimeInterval(-Double(max(1, dias)) * 86400)
         var removidos = 0
 
+        // NUNCA apagar o banco de eventos nem seus arquivos auxiliares do WAL:
+        // eles vivem em `dirEventos` e, se o app ficasse parado mais dias que a
+        // retenção, a varredura levaria o histórico inteiro junto com os CSVs.
+        let protegidos: Set<String> = ["vigia.sqlite3", "vigia.sqlite3-wal", "vigia.sqlite3-shm"]
+
         for raiz in [dirGravacoes, dirCapturas, dirEventos] {
             guard let enumerator = fileManager.enumerator(at: raiz, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
             while let url = enumerator.nextObject() as? URL {
+                if protegidos.contains(url.lastPathComponent) { continue }
                 guard let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                       let modDate = attrs.contentModificationDate,
                       modDate < cutoff else { continue }
                 try? fileManager.removeItem(at: url)
                 removidos += 1
             }
+        }
+        if removidos > 0 {
+            auditar("retencao", detalhe: "removidos \(removidos) arquivo(s) com mais de \(dias) dia(s)")
         }
         return removidos
     }

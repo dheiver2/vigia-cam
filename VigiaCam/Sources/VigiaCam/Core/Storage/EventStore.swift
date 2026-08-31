@@ -149,6 +149,27 @@ final class EventStore {
     }
 
     /// Busca com filtros combináveis. `texto` casa tipo/câmera/detalhe.
+    /// Todas as câmeras que já geraram evento na janela — a aba Eventos
+    /// montava o filtro a partir dos resultados JÁ filtrados, então escolher
+    /// uma câmera eliminava as demais opções do seletor.
+    func camerasDistintas(dias: Int = 7) -> [String] {
+        fila.sync { [self] in
+            guard db != nil else { return [] }
+            let desde = Date().addingTimeInterval(-Double(max(1, dias)) * 86400).timeIntervalSince1970
+            var stmt: OpaquePointer?
+            var nomes: [String] = []
+            let sql = "SELECT DISTINCT camera FROM eventos WHERE ts >= ? ORDER BY camera"
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_double(stmt, 1, desde)
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    if let c = sqlite3_column_text(stmt, 0) { nomes.append(String(cString: c)) }
+                }
+            }
+            sqlite3_finalize(stmt)
+            return nomes
+        }
+    }
+
     func buscar(texto: String = "", camera: String = "", tipo: String = "",
                 somenteAbertos: Bool = false, dias: Int = 7, limite: Int = 1000) -> [Registro] {
         fila.sync { [self] in
@@ -536,13 +557,13 @@ final class EventStore {
             }
 
             let formatador = ISO8601DateFormatter()
-            var csv = cabecalho.map(csvEscapar).joined(separator: ",") + "\n"
+            var csv = cabecalho.map(Self.csvEscapar).joined(separator: ",") + "\n"
             for linha in linhas {
                 var campos = linha
                 if let ts = Double(campos[0]) {
                     campos[0] = formatador.string(from: Date(timeIntervalSince1970: ts))
                 }
-                csv += campos.map(csvEscapar).joined(separator: ",") + "\n"
+                csv += campos.map(Self.csvEscapar).joined(separator: ",") + "\n"
             }
 
             let nomeArquivo = "export-\(tabela.rawValue)-\(Int(Date().timeIntervalSince1970)).csv"
@@ -572,7 +593,10 @@ final class EventStore {
         return out
     }
 
-    private func csvEscapar(_ campo: String) -> String {
+    /// Escape CSV correto (RFC 4180). Era privado, e por isso a aba Eventos
+    /// tinha a própria versão trocando vírgula por ";" — que corrompia colunas
+    /// em qualquer detalhe com aspas ou quebra de linha.
+    static func csvEscapar(_ campo: String) -> String {
         guard campo.contains(",") || campo.contains("\"") || campo.contains("\n") else { return campo }
         return "\"" + campo.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }

@@ -81,8 +81,16 @@ struct RecordingsBrowserView: View {
                 HStack(spacing: 8) {
                     if podeOperar {
                         Button {
-                            _ = StorageService.shared.exportarEvidencia(
-                                arquivo: sel.url.path, camera: sel.camera, usuario: usuario)
+                            // O retorno era descartado com `_ =` e a exportação
+                            // falhava em silêncio: o usuário clicava e não
+                            // sabia se tinha saído alguma coisa.
+                            if let zip = StorageService.shared.exportarEvidencia(
+                                arquivo: sel.url.path, camera: sel.camera, usuario: usuario) {
+                                msgTimelapse = "Evidência exportada: \(zip.lastPathComponent)"
+                                NSWorkspace.shared.activateFileViewerSelecting([zip])
+                            } else {
+                                msgTimelapse = "Falha ao exportar evidência (veja a auditoria)."
+                            }
                         } label: { Label("Exportar evidência", systemImage: "shippingbox") }
                             .buttonStyle(.bordered).tint(VigiaTheme.accent)
                     }

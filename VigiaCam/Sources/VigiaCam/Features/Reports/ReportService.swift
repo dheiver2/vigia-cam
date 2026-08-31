@@ -5,7 +5,14 @@ import AppKit
 enum ReportService {
 
     /// Monta um PDF paginado a partir dos eventos e devolve a URL salva.
-    static func gerarPDF(eventos: [EventService.Evento], periodo: String,
+    ///
+    /// Recebe `EventStore.Registro` (SQLite) e não mais os `EventService.Evento`
+    /// vindos dos CSVs diários: aqueles eram escritos sem escape de vírgula e
+    /// relidos com `components(separatedBy: ",")`, então qualquer detalhe com
+    /// vírgula deslocava as colunas — e o carregamento truncava em 500 linhas
+    /// enquanto o cabeçalho imprimia "Total de eventos: 500" como se fosse o
+    /// número real do período.
+    static func gerarPDF(eventos: [EventStore.Registro], periodo: String,
                          usuario: String, cameras: Int) -> URL? {
         let pageW: CGFloat = 595, pageH: CGFloat = 842   // A4 em pontos (72dpi)
         let margem: CGFloat = 40
@@ -25,18 +32,27 @@ enum ReportService {
         let linha: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 9), .foregroundColor: NSColor.black]
 
+        // Coluna de tratativa incluída: é justamente o dado de valor
+        // probatório que o CSV já trazia e o PDF omitia.
         let cols: [(String, CGFloat)] = [
-            ("Data", 70), ("Hora", 55), ("Tipo", 120), ("Câmera", 150), ("Detalhe", 190)]
+            ("Data", 62), ("Hora", 48), ("Tipo", 96), ("Câmera", 118), ("Detalhe", 156), ("Tratativa", 35)]
         let linhasPorPagina = 40
         let paginas = max(1, Int(ceil(Double(eventos.count) / Double(linhasPorPagina))))
 
         func desenhar(_ s: String, _ attrs: [NSAttributedString.Key: Any], x: CGFloat, y: CGFloat, w: CGFloat) {
-            let ns = NSAttributedString(string: s, attributes: attrs)
+            // Corte com reticências: antes truncava em 60 caracteres sem
+            // nenhuma marca, e o leitor não sabia que faltava texto.
+            let limite = max(8, Int(w / 4.2))
+            let texto = s.count > limite ? String(s.prefix(limite - 1)) + "…" : s
+            let ns = NSAttributedString(string: texto, attributes: attrs)
             let path = CGPath(rect: CGRect(x: x, y: y - 11, width: w, height: 12), transform: nil)
             let fs = CTFramesetterCreateWithAttributedString(ns)
-            let frame = CTFramesetterCreateFrame(fs, CFRange(location: 0, length: min(ns.length, 60)), path, nil)
+            let frame = CTFramesetterCreateFrame(fs, CFRange(location: 0, length: ns.length), path, nil)
             CTFrameDraw(frame, ctx)
         }
+
+        let fData = DateFormatter(); fData.dateFormat = "dd/MM/yyyy"
+        let fHora = DateFormatter(); fHora.dateFormat = "HH:mm:ss"
 
         for p in 0..<paginas {
             ctx.beginPDFPage(nil)
@@ -71,7 +87,9 @@ enum ReportService {
                         ctx.setFillColor(NSColor(white: 0.95, alpha: 1).cgColor)
                         ctx.fill(CGRect(x: margem, y: y - 14, width: pageW - 2 * margem, height: 15))
                     }
-                    let vals = [ev.data, ev.hora, ev.tipo, ev.camera, ev.detalhe]
+                    let vals = [fData.string(from: ev.quando), fHora.string(from: ev.quando),
+                                ev.tipo, ev.camera, ev.detalhe,
+                                ev.status == "tratado" ? "OK" : "—"]
                     x = margem + 4
                     for (j, w) in cols.map({ $0.1 }).enumerated() {
                         desenhar(vals[j], linha, x: x, y: y - 2, w: w - 6); x += w

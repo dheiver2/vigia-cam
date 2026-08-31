@@ -6,6 +6,9 @@ import AppKit
 struct EventListView: View {
     @ObservedObject var eventService: EventService
     var usuario: String = "sistema"
+    /// Tratar evento é ação de operador — antes esta tela não recebia papel
+    /// nenhum e um visualizador podia dar baixa em alarme.
+    var podeOperar: Bool = true
 
     @State private var registros: [EventStore.Registro] = []
     @State private var searchText = ""
@@ -13,12 +16,30 @@ struct EventListView: View {
     @State private var cameraFiltro = ""
     @State private var tipoFiltro = ""
     @State private var somenteAbertos = false
+    /// Câmeras vindas do banco (não dos resultados já filtrados).
+    @State private var cameras: [String] = []
+    /// Resultado bateu no teto de `buscar` — o rodapé precisa dizer isso em vez
+    /// de exibir "1000 eventos" como se fosse o total.
+    @State private var truncado = false
+    @State private var aviso: String?
+    @State private var buscaPendente: Task<Void, Never>?
 
-    private var cameras: [String] { Array(Set(registros.map(\.camera))).sorted() }
+    private static let limiteBusca = 1000
 
     var body: some View {
         VStack(spacing: 0) {
             filtros
+            if let aviso {
+                HStack(spacing: 6) {
+                    Image(systemName: aviso.hasPrefix("Falha") ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    Text(aviso).font(.system(size: 11))
+                    Spacer()
+                    Button("OK") { self.aviso = nil }.buttonStyle(.plain).font(.system(size: 11))
+                }
+                .foregroundColor(aviso.hasPrefix("Falha") ? VigiaTheme.danger : VigiaTheme.ok)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(VigiaTheme.card)
+            }
             if registros.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "bolt.slash").font(.system(size: 48)).foregroundColor(VigiaTheme.border)
@@ -68,8 +89,12 @@ struct EventListView: View {
                 Toggle("Só abertos", isOn: $somenteAbertos).toggleStyle(.checkbox)
                     .font(.system(size: 12)).foregroundColor(VigiaTheme.muted)
                 Spacer()
-                Text("\(registros.count) eventos")
-                    .font(.system(size: 11, design: .monospaced)).foregroundColor(VigiaTheme.muted)
+                Text(truncado ? "\(registros.count)+ eventos (limite da busca)"
+                              : "\(registros.count) eventos")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(truncado ? VigiaTheme.warning : VigiaTheme.muted)
+                    .help(truncado ? "Refine o filtro: a consulta devolve no máximo \(Self.limiteBusca) eventos."
+                                   : "")
             }
         }
         .padding(12)
@@ -77,7 +102,7 @@ struct EventListView: View {
         .onChange(of: cameraFiltro) { recarregar() }
         .onChange(of: tipoFiltro) { recarregar() }
         .onChange(of: somenteAbertos) { recarregar() }
-        .onChange(of: searchText) { recarregar() }
+        .onChange(of: searchText) { recarregarComAtraso() }
     }
 
     private func linha(_ r: EventStore.Registro) -> some View {
@@ -99,7 +124,10 @@ struct EventListView: View {
                         Text("por \(r.checadoPor)").font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
                     }
                 }
-            } else if r.tipo.hasPrefix("ALARME") {
+            } else if podeOperar {
+                // Antes só ALARME era tratável, mas o filtro "Só abertos"
+                // incluía os demais tipos — eles ficavam abertos para sempre,
+                // sem nenhuma ação possível.
                 Button("Tratar") {
                     EventStore.shared.tratar(id: r.id, usuario: usuario)
                     recarregar()
@@ -127,20 +155,49 @@ struct EventListView: View {
     }
 
     private func recarregar() {
-        registros = EventStore.shared.buscar(texto: searchText, camera: cameraFiltro,
-                                             tipo: tipoFiltro, somenteAbertos: somenteAbertos, dias: dias)
+        let achados = EventStore.shared.buscar(texto: searchText, camera: cameraFiltro,
+                                               tipo: tipoFiltro, somenteAbertos: somenteAbertos,
+                                               dias: dias, limite: Self.limiteBusca)
+        registros = achados
+        truncado = achados.count >= Self.limiteBusca
+        cameras = EventStore.shared.camerasDistintas(dias: dias)
+    }
+
+    /// Busca com atraso: `recarregar()` faz consulta SQLite síncrona, e
+    /// dispará-la a cada tecla travava a digitação em bancos grandes.
+    private func recarregarComAtraso() {
+        buscaPendente?.cancel()
+        buscaPendente = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            recarregar()
+        }
     }
 
     private func exportarCSV() {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        var csv = "quando,tipo,camera,detalhe,status,checado_por\n"
+        let cabecalho = ["quando", "tipo", "camera", "detalhe", "status", "checado_por"]
+        var csv = cabecalho.joined(separator: ",") + "\n"
         for r in registros {
-            let det = r.detalhe.replacingOccurrences(of: ",", with: ";")
-            csv += "\(f.string(from: r.quando)),\(r.tipo),\(r.camera),\(det),\(r.status),\(r.checadoPor)\n"
+            // Escape RFC 4180 de verdade (o antigo trocava "," por ";" só no
+            // detalhe, e qualquer aspas/quebra de linha desalinhava as colunas).
+            let campos = [f.string(from: r.quando), r.tipo, r.camera, r.detalhe, r.status, r.checadoPor]
+            csv += campos.map(EventStore.csvEscapar).joined(separator: ",") + "\n"
         }
-        let url = StorageService.shared.dirEventos.appendingPathComponent("busca-eventos.csv")
-        try? csv.data(using: .utf8)?.write(to: url)
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        // Nome com timestamp: o fixo "busca-eventos.csv" sobrescrevia a
+        // exportação anterior sem avisar.
+        let carimbo = DateFormatter(); carimbo.dateFormat = "yyyyMMdd-HHmmss"
+        let nome = "busca-eventos-\(carimbo.string(from: Date())).csv"
+        let url = StorageService.shared.dirEventos.appendingPathComponent(nome)
+        do {
+            try csv.data(using: .utf8)?.write(to: url)
+            // Só revela no Finder DEPOIS de escrever: antes o Finder abria
+            // mesmo com a escrita falhando, e o usuário jurava ter exportado.
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            aviso = "Exportado: \(nome)"
+        } catch {
+            aviso = "Falha ao exportar: \(error.localizedDescription)"
+        }
     }
 
     private func hora(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f.string(from: d) }

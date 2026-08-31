@@ -39,6 +39,8 @@ class CameraCardViewModel: ObservableObject {
     private var intrusoesTotal = 0
     private var permanenciasTotal = 0
     private var isDetecting = false
+    /// Quando a última amostra da série histórica foi gravada.
+    private var ultimaAmostra = Date()
     private var bag = Set<AnyCancellable>()
     /// Carregada uma vez ao iniciar a câmera — antes a UI de Configurações (FPS
     /// Máximo, Confiança Mínima, Classes) existia mas não tinha efeito nenhum no
@@ -188,6 +190,9 @@ class CameraCardViewModel: ObservableObject {
     }
 
     func stop() {
+        // Flush final: sem isto, o trecho desde a última amostra (até 1 min de
+        // contagens) era perdido toda vez que a câmera saía de cena.
+        persistirAmostra(parcial: true)
         detectTimer?.invalidate(); detectTimer = nil
         displayTimer?.invalidate(); displayTimer = nil
         // finaliza gravação órfã (ex.: trocou de página do videowall gravando),
@@ -197,7 +202,7 @@ class CameraCardViewModel: ObservableObject {
         }
         cameraService.stopCamera()
         AlarmService.shared.removerSnapshotProvider(camera: camera.nome)
-        CameraHealthRegistry.shared.remover(camera.id)
+        CameraHealthRegistry.shared.encerrarSessao(camera.id)
     }
 
     /// Extrapola as caixas rastreadas a ~15 Hz (independente da taxa de inferência),
@@ -259,21 +264,43 @@ class CameraCardViewModel: ObservableObject {
             m.permanencias = permanenciasTotal
             BusinessMetricsService.shared.reportar(camera: camera.nome, metrica: m)
         }
-        // Série temporal persistida (1 amostra/min por câmera) — destrava
-        // relatório histórico; antes as métricas morriam com a sessão.
-        if displayTick % 900 == 0 {
-            let unicos = tracker.unicosPorClasse
-            EventStore.shared.registrarMetrica(
-                camera: camera.nome,
-                entradas: lineCounter.totalEntradas, saidas: lineCounter.totalSaidas,
-                ocupacao: zoneMonitor.ocupacao.values.reduce(0, +),
-                intrusoes: intrusoesTotal, permanencias: permanenciasTotal,
-                pessoasUnicas: (unicos["person"] ?? 0) + (unicos["Person"] ?? 0),
-                veiculosUnicas: ["car", "truck", "bus", "motorcycle", "bicycle"].reduce(0) { $0 + (unicos[$1] ?? 0) })
-            if let grade = HeatmapService.shared.drenar(camera: camera.nome) {
-                EventStore.shared.registrarHeatmap(camera: camera.nome, colunas: HeatmapService.colunas,
-                                                    linhas: HeatmapService.linhas, grade: grade)
-            }
+        // Série temporal persistida — destrava o relatório histórico.
+        //
+        // Era `displayTick % 900`, ou seja, exigia 900 ticks (60s) da MESMA
+        // instância de VM e casava só no múltiplo exato. Como o VM morria a
+        // cada troca de página, e a ronda automática vira página a cada 10s,
+        // a série quase nunca era gravada: as janelas de 7/30 dias ficavam
+        // zeradas e o mapa de calor acumulado vinha vazio. Agora o critério é
+        // TEMPO DECORRIDO, e `stop()` faz um flush final para não perder o
+        // trecho em andamento.
+        if Date().timeIntervalSince(ultimaAmostra) >= Self.intervaloAmostra {
+            persistirAmostra()
+        }
+    }
+
+    /// Intervalo entre amostras da série histórica.
+    private static let intervaloAmostra: TimeInterval = 60
+
+    /// Grava uma amostra da série + drena o mapa de calor acumulado.
+    /// `parcial` marca o flush de encerramento (pode vir antes do minuto).
+    private func persistirAmostra(parcial: Bool = false) {
+        // Sem nada observado ainda não há o que gravar: evita poluir a série
+        // com linhas zeradas de câmeras que só apareceram por um instante.
+        let unicos = tracker.unicosPorClasse
+        let vazio = unicos.isEmpty && lineCounter.totalEntradas == 0 && lineCounter.totalSaidas == 0
+            && intrusoesTotal == 0 && permanenciasTotal == 0
+        if parcial && vazio { return }
+        ultimaAmostra = Date()
+        EventStore.shared.registrarMetrica(
+            camera: camera.nome,
+            entradas: lineCounter.totalEntradas, saidas: lineCounter.totalSaidas,
+            ocupacao: zoneMonitor.ocupacao.values.reduce(0, +),
+            intrusoes: intrusoesTotal, permanencias: permanenciasTotal,
+            pessoasUnicas: (unicos["person"] ?? 0) + (unicos["Person"] ?? 0),
+            veiculosUnicas: ["car", "truck", "bus", "motorcycle", "bicycle"].reduce(0) { $0 + (unicos[$1] ?? 0) })
+        if let grade = HeatmapService.shared.drenar(camera: camera.nome) {
+            EventStore.shared.registrarHeatmap(camera: camera.nome, colunas: HeatmapService.colunas,
+                                                linhas: HeatmapService.linhas, grade: grade)
         }
     }
 

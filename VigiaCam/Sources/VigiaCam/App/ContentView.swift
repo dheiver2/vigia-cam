@@ -34,10 +34,21 @@ struct ContentView: View {
             cameras = storage.carregarCameras()
             AlarmService.shared.configure(eventService: eventService, cameras: cameras)
             LPRService.shared.configure(eventService: eventService)
+            // Saúde das câmeras deixa de depender de a aba "Ao Vivo" estar
+            // aberta (o Dashboard mostrava "Online: 0" por construção).
+            CameraHealthMonitor.shared.configurar(cameras: cameras)
+            // Retenção: `limparRetencao` existia, era testada e NUNCA era
+            // chamada — o disco crescia para sempre e o prazo prometido na
+            // tela de Configurações não valia nada (inclusive para LGPD).
+            let dias = storage.carregarConfig().retencaoDias
+            DispatchQueue.global(qos: .utility).async {
+                storage.limparRetencao(dias: dias)
+            }
         }
         .onChange(of: storage.camerasVersao) {
             cameras = storage.carregarCameras()
             AlarmService.shared.configure(eventService: eventService, cameras: cameras)
+            CameraHealthMonitor.shared.configurar(cameras: cameras)
         }
     }
 
@@ -48,7 +59,10 @@ struct ContentView: View {
                     Text("VIGIA").font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(.white)
                     Text(".").font(.system(size: 18, weight: .black, design: .rounded)).foregroundColor(VigiaTheme.accent)
                 }
-                Text("v2.3.0 • macOS").font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
+                // Lê do bundle: a string fixa aqui dizia "v2.3.0" enquanto o
+                // app já era 2.4.0 — e ia continuar mentindo a cada release.
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") • macOS")
+                    .font(.system(size: 9)).foregroundColor(VigiaTheme.muted)
             }.padding(.horizontal, 16).padding(.vertical, 12)
 
             Divider().background(VigiaTheme.border)
@@ -152,7 +166,8 @@ struct ContentView: View {
         case "lpr": LPRView(podeGerenciar: papel.podeOperar)
         case "business": BusinessDashboardView()
         case "dashboard": DashboardView(storage: storage, eventService: eventService)
-        case "events": EventListView(eventService: eventService, usuario: usuario)
+        case "events": EventListView(eventService: eventService, usuario: usuario,
+                                     podeOperar: papel.podeOperar)
         case "recordings": RecordingsBrowserView(usuario: usuario, podeOperar: papel.podeOperar)
         case "reports": ReportsView(eventService: eventService, totalCameras: cameras.count,
                                      usuario: usuario)

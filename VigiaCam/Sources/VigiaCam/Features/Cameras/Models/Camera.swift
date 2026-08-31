@@ -103,6 +103,7 @@ struct Camera: Codable, Identifiable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, nome, categoria, url, latitude, longitude
+        case modeloDeteccao, modeloCascata
         case onvifXAddr, onvifPTZXAddr, onvifProfileToken, onvifUsuario, onvifSenha
     }
 
@@ -117,6 +118,12 @@ struct Camera: Codable, Identifiable, Hashable {
         categoria = (try? c.decode(String.self, forKey: .categoria)) ?? Self.categoriaPadrao
         latitude = try? c.decode(Double.self, forKey: .latitude)
         longitude = try? c.decode(Double.self, forKey: .longitude)
+        // Sem case em CodingKeys (e sem leitura aqui) esses dois campos eram
+        // descartados no encode/decode: a escolha de modelo por câmera valia só
+        // até fechar o app, e qualquer `salvarCameras` (fixar no mapa, p.ex.)
+        // apagava a escolha de TODAS as câmeras.
+        modeloDeteccao = try? c.decode(String.self, forKey: .modeloDeteccao)
+        modeloCascata = try? c.decode(String.self, forKey: .modeloCascata)
         onvifXAddr = try? c.decode(String.self, forKey: .onvifXAddr)
         onvifPTZXAddr = try? c.decode(String.self, forKey: .onvifPTZXAddr)
         onvifProfileToken = try? c.decode(String.self, forKey: .onvifProfileToken)

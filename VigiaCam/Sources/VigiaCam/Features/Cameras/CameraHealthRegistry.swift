@@ -1,37 +1,83 @@
 import Foundation
 import Combine
 
-/// Quem está realmente recebendo frames agora.
+/// Quem está realmente disponível agora.
 ///
-/// O Dashboard mostrava `Online = total de câmeras` — um número fixo que nunca
-/// refletia a realidade (com todos os streams caídos, ainda dizia "29 online").
-/// Cada `CameraCardViewModel` publica aqui o estado do seu stream, e o painel lê
-/// a contagem de verdade.
+/// Duas fontes, com precedência: a **sessão** viva (quem está recebendo frames
+/// de verdade) manda; quando não há sessão, vale o resultado da **sonda**
+/// periódica (`CameraHealthMonitor`).
+///
+/// Antes só as sessões alimentavam este registro, e como as sessões só existem
+/// enquanto a aba "Ao Vivo" está na tela, o Dashboard exibia "Online: 0" e os
+/// pins do Mapa ficavam todos cinza — justamente nas telas onde o número
+/// importa. Trocar um número sempre-errado-para-mais (total de câmeras) por
+/// outro sempre-errado-para-menos não resolvia nada.
 final class CameraHealthRegistry: ObservableObject {
     static let shared = CameraHealthRegistry()
 
-    /// Ids (URL) das câmeras com stream vivo.
+    /// Ids das câmeras disponíveis (sessão recebendo frames ou sonda OK).
     @Published private(set) var online: Set<String> = []
-    /// Ids das câmeras que já desistiram de reconectar.
+    /// Ids das câmeras que desistiram de reconectar (só a sessão sabe disso).
     @Published private(set) var inalcancaveis: Set<String> = []
 
+    private var porSessao: [String: Bool] = [:]
+    private var porSonda: [String: Bool] = [:]
+    private var nomes: [String: String] = [:]
+
     /// Último estado JÁ REGISTRADO no histórico, por id — evita gravar o
-    /// "offline" inicial de um card que acabou de nascer e ainda nem conectou.
+    /// "offline" inicial de uma câmera que ainda nem tentou conectar.
     private var ultimoRegistrado: [String: Bool] = [:]
 
     private init() {}
 
+    /// Estado vindo de uma sessão viva (tem prioridade sobre a sonda).
     func atualizar(_ id: String, nome: String? = nil, online estaOnline: Bool, inalcancavel: Bool) {
-        var novoOnline = online
-        var novoInalc = inalcancaveis
-        if estaOnline { novoOnline.insert(id) } else { novoOnline.remove(id) }
-        if inalcancavel { novoInalc.insert(id) } else { novoInalc.remove(id) }
-        guard novoOnline != online || novoInalc != inalcancaveis else { return }
-        online = novoOnline
-        inalcancaveis = novoInalc
+        if let nome { nomes[id] = nome }
+        porSessao[id] = estaOnline
+        if inalcancavel { inalcancaveis.insert(id) } else { inalcancaveis.remove(id) }
+        recomputar()
+    }
 
-        // Log persistente de transições online/offline (histórico de uptime).
-        let rotulo = nome ?? id
+    /// A sessão terminou (card saiu de cena, troca de aba). A câmera NÃO some
+    /// do painel: passa a valer o que a sonda disser.
+    func encerrarSessao(_ id: String) {
+        porSessao[id] = nil
+        inalcancaveis.remove(id)
+        recomputar()
+    }
+
+    /// Resultado da sonda periódica, usado quando não há sessão.
+    func atualizarSonda(_ id: String, nome: String, alcancavel: Bool) {
+        nomes[id] = nome
+        porSonda[id] = alcancavel
+        recomputar()
+    }
+
+    /// Câmeras removidas do sistema saem de vez do painel.
+    func esquecer(_ ids: Set<String>) {
+        for id in ids {
+            porSessao[id] = nil; porSonda[id] = nil
+            nomes[id] = nil; ultimoRegistrado[id] = nil
+            inalcancaveis.remove(id)
+        }
+        recomputar()
+    }
+
+    private func recomputar() {
+        var novo: Set<String> = []
+        for (id, viva) in porSessao where viva { novo.insert(id) }
+        for (id, ok) in porSonda where ok && porSessao[id] == nil { novo.insert(id) }
+        guard novo != online else { return }
+        let entraram = novo.subtracting(online)
+        let sairam = online.subtracting(novo)
+        online = novo
+        for id in entraram { registrarHistorico(id, online: true) }
+        for id in sairam { registrarHistorico(id, online: false) }
+    }
+
+    /// Log persistente de transições (histórico de uptime).
+    private func registrarHistorico(_ id: String, online estaOnline: Bool) {
+        let rotulo = nomes[id] ?? id
         switch (ultimoRegistrado[id], estaOnline) {
         case (nil, true), (false, true):
             ultimoRegistrado[id] = true
@@ -44,13 +90,5 @@ final class CameraHealthRegistry: ObservableObject {
         default:
             break   // nunca esteve online — não registra o "offline" de nascença
         }
-    }
-
-    /// Chamado quando o card sai de cena (troca de página do videowall): sem
-    /// isso, uma câmera que parou de ser exibida continuaria contando como
-    /// online para sempre.
-    func remover(_ id: String) {
-        online.remove(id)
-        inalcancaveis.remove(id)
     }
 }

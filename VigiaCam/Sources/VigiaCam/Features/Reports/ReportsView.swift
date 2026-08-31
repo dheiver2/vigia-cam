@@ -8,7 +8,11 @@ struct ReportsView: View {
     let totalCameras: Int
     let usuario: String
 
-    @State private var dias = 7
+    // Eram um @State só para os dois Steppers: mexer no do CSV mudava o do
+    // PDF e vice-versa, embora a tela mostre controles separados.
+    @State private var diasPDF = 7
+    @State private var diasCSV = 7
+    @State private var erroPDF: String?
     @State private var gerando = false
     @State private var ultimoPDF: URL?
     @State private var tabelaCSV: EventStore.TabelaExport = .eventos
@@ -25,7 +29,7 @@ struct ReportsView: View {
                 // Relatório PDF
                 painel(titulo: "Relatório de eventos (PDF)", icon: "doc.richtext") {
                     HStack(spacing: 12) {
-                        Stepper("Últimos \(dias) dia(s)", value: $dias, in: 1...90)
+                        Stepper("Últimos \(diasPDF) dia(s)", value: $diasPDF, in: 1...90)
                             .foregroundColor(VigiaTheme.text)
                         Spacer()
                         Button {
@@ -33,6 +37,14 @@ struct ReportsView: View {
                         } label: {
                             HStack { Image(systemName: "arrow.down.doc"); Text(gerando ? "Gerando…" : "Gerar PDF") }
                         }.buttonStyle(.borderedProminent).tint(VigiaTheme.accent).disabled(gerando)
+                    }
+                    if let erroPDF {
+                        // Falha do CGContext sumia em silêncio — indistinguível
+                        // de "ainda não gerei".
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text(erroPDF).font(.system(size: 11))
+                        }.foregroundColor(VigiaTheme.danger)
                     }
                     if let pdf = ultimoPDF {
                         HStack(spacing: 8) {
@@ -52,7 +64,7 @@ struct ReportsView: View {
                         Picker("", selection: $tabelaCSV) {
                             ForEach(EventStore.TabelaExport.allCases) { Text($0.titulo).tag($0) }
                         }.labelsHidden().frame(width: 220)
-                        Stepper("Últimos \(dias) dia(s)", value: $dias, in: 1...90)
+                        Stepper("Últimos \(diasCSV) dia(s)", value: $diasCSV, in: 1...90)
                             .foregroundColor(VigiaTheme.text)
                         Spacer()
                         Button {
@@ -94,25 +106,34 @@ struct ReportsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VigiaTheme.bg)
-        .onAppear { eventService.carregarEventos(dias: dias) }
+        .onAppear { eventService.carregarEventos(dias: diasPDF) }
     }
 
     private func gerarPDF() {
         gerando = true
-        eventService.carregarEventos(dias: dias)
         let f = DateFormatter(); f.dateFormat = "dd/MM/yyyy"
-        let ini = Calendar.current.date(byAdding: .day, value: -(dias - 1), to: Date()) ?? Date()
+        let ini = Calendar.current.date(byAdding: .day, value: -(diasPDF - 1), to: Date()) ?? Date()
         let periodo = "\(f.string(from: ini)) a \(f.string(from: Date()))"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            ultimoPDF = ReportService.gerarPDF(eventos: eventService.eventos, periodo: periodo,
-                                               usuario: usuario, cameras: totalCameras)
-            gerando = false
+        let janela = diasPDF
+        // Lê do SQLite em background e só então desenha: o fluxo antigo
+        // disparava um carregamento assíncrono e gerava o PDF depois de um
+        // `asyncAfter(0.3s)` fixo — em disco lento saía com os eventos do
+        // período anterior, sem nenhum aviso.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let registros = EventStore.shared.buscar(dias: janela, limite: 100_000)
+            let url = ReportService.gerarPDF(eventos: registros, periodo: periodo,
+                                             usuario: usuario, cameras: totalCameras)
+            DispatchQueue.main.async {
+                ultimoPDF = url
+                erroPDF = url == nil ? "Não foi possível gerar o PDF (verifique espaço em disco)." : nil
+                gerando = false
+            }
         }
     }
 
     private func exportarCSV() {
         exportandoCSV = true
-        let inicio = Calendar.current.date(byAdding: .day, value: -(dias - 1), to: Date()) ?? Date()
+        let inicio = Calendar.current.date(byAdding: .day, value: -(diasCSV - 1), to: Date()) ?? Date()
         let tabela = tabelaCSV
         DispatchQueue.global(qos: .userInitiated).async {
             let url = EventStore.shared.exportarCSV(tabela: tabela, desde: inicio, ate: Date())
