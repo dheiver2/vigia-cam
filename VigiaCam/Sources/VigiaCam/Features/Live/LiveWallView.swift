@@ -61,18 +61,22 @@ struct LiveWallView: View {
         .onReceive(rondaTimer) { _ in avancarRonda() }
     }
 
-    /// Atalhos de teclado (VMS): 1–4 mosaicos, ←→ páginas, F tela cheia, O OSD.
+    /// Atalhos de teclado (VMS): ⌘1–⌘4 mosaicos, ←→ páginas, ⌘F tela cheia,
+    /// ⌘O OSD, ⌘R ronda.
+    ///
+    /// Todos com ⌘: sem modificador, digitar "4" ou espaço no campo "Buscar…"
+    /// trocava o mosaico e ligava a ronda em vez de escrever no campo.
     private var atalhosTeclado: some View {
         ZStack {
-            Button("") { trocarLayout(1) }.keyboardShortcut("1", modifiers: [])
-            Button("") { trocarLayout(4) }.keyboardShortcut("2", modifiers: [])
-            Button("") { trocarLayout(9) }.keyboardShortcut("3", modifiers: [])
-            Button("") { trocarLayout(16) }.keyboardShortcut("4", modifiers: [])
+            Button("") { trocarLayout(1) }.keyboardShortcut("1", modifiers: .command)
+            Button("") { trocarLayout(4) }.keyboardShortcut("2", modifiers: .command)
+            Button("") { trocarLayout(9) }.keyboardShortcut("3", modifiers: .command)
+            Button("") { trocarLayout(16) }.keyboardShortcut("4", modifiers: .command)
             Button("") { irPara(pagina - 1) }.keyboardShortcut(.leftArrow, modifiers: [])
             Button("") { irPara(pagina + 1) }.keyboardShortcut(.rightArrow, modifiers: [])
-            Button("") { NSApp.keyWindow?.toggleFullScreen(nil) }.keyboardShortcut("f", modifiers: [])
-            Button("") { osd.toggle() }.keyboardShortcut("o", modifiers: [])
-            Button("") { ronda.toggle() }.keyboardShortcut(.space, modifiers: [])
+            Button("") { NSApp.keyWindow?.toggleFullScreen(nil) }.keyboardShortcut("f", modifiers: .command)
+            Button("") { osd.toggle() }.keyboardShortcut("o", modifiers: .command)
+            Button("") { ronda.toggle() }.keyboardShortcut("r", modifiers: .command)
         }.opacity(0).allowsHitTesting(false)
     }
 
@@ -154,7 +158,7 @@ struct LiveWallView: View {
                 .background(ronda ? AnyView(VigiaTheme.accentGradient) : AnyView(VigiaTheme.card))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }.buttonStyle(.plain)
-            Stepper("", value: $rondaSeg, in: 3...60, step: 1).labelsHidden().frame(width: 20)
+            Stepper("", value: $rondaSeg, in: 3...60, step: 1).labelsHidden().frame(width: 56)
 
             // OSD (legenda sempre visível)
             Button { osd.toggle() } label: {

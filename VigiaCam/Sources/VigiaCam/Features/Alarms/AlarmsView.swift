@@ -4,6 +4,10 @@ import SwiftUI
 struct AlarmsView: View {
     @ObservedObject private var alarms = AlarmService.shared
     let categorias: [String]
+    /// Nomes das câmeras: `EscopoAlarme.camera` sempre existiu no modelo (e
+    /// regras antigas o usam), mas a tela só oferecia "todas" e categorias —
+    /// não havia como criar nem recriar uma regra de uma câmera específica.
+    var nomesCameras: [String] = []
 
     @State private var nome = ""
     @State private var alvo: AlvoAlarme = .classe("person")
@@ -11,14 +15,20 @@ struct AlarmsView: View {
     @State private var escopo: EscopoAlarme = .todas
     @State private var severidade: Severidade = .aviso
 
-    private let alvos: [AlvoAlarme] = [
-        .classe("person"), .classe("car"), .classe("truck"), .classe("bus"),
-        .classe("motorcycle"), .classe("bicycle"), .qualquerObjeto
-    ]
+    /// Classes do modelo ATIVO, não uma lista fixa de 6 COCO: com o modelo de
+    /// EPI (ou a cascata publicando "NO-Hardhat") era impossível criar alarme
+    /// para as classes que mais importam nesse nicho.
+    private var alvos: [AlvoAlarme] {
+        let classes = ModelProvider.tipoAtivo == .ppe ? ClassesEPI.nomes : ClassesCOCO.nomes
+        return classes.sorted().map { AlvoAlarme.classe($0) } + [.qualquerObjeto]
+    }
 
     /// O seletor listava categorias sob o rótulo "Câmera" e gravava só o texto,
     /// num campo que casava por nome OU categoria. Agora cada opção diz o que é.
-    private var escopos: [EscopoAlarme] { [.todas] + categorias.map { EscopoAlarme.categoria($0) } }
+    private var escopos: [EscopoAlarme] {
+        [.todas] + categorias.map { EscopoAlarme.categoria($0) }
+                 + nomesCameras.sorted().map { EscopoAlarme.camera($0) }
+    }
 
     var body: some View {
         HStack(spacing: 0) {

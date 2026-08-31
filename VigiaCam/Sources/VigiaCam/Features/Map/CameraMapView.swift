@@ -14,6 +14,10 @@ struct CameraMapView: View {
         center: CLLocationCoordinate2D(latitude: -14.2, longitude: -51.9),
         span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)))
     @State private var centroAtual = CLLocationCoordinate2D(latitude: -14.2, longitude: -51.9)
+    /// Câmera aberta pelo pin. Clicar no marcador não fazia nada — só havia o
+    /// menu de contexto "Remover do mapa", e ver a câmera é justamente para o
+    /// que serve um mapa num VMS.
+    @State private var cameraAberta: Camera?
 
     private var comCoordenada: [Camera] {
         cameras.filter { $0.latitude != nil && $0.longitude != nil }
@@ -33,7 +37,11 @@ struct CameraMapView: View {
                             Image(systemName: "video.fill").font(.system(size: 7)).foregroundColor(.black)
                         }
                         .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                        .contentShape(Circle())
+                        .onTapGesture { cameraAberta = cam }
+                        .help("Abrir \(cam.nome)")
                         .contextMenu {
+                            Button("Ver câmera") { cameraAberta = cam }
                             Button("Remover do mapa") { definirCoordenada(cam, coord: nil) }
                         }
                     }
@@ -46,6 +54,7 @@ struct CameraMapView: View {
         .background(VigiaTheme.bg)
         .onAppear(perform: recarregar)
         .onChange(of: storage.camerasVersao) { recarregar() }
+        .sheet(item: $cameraAberta) { CameraDetailView(camera: $0) }
     }
 
     private var painelLateral: some View {
@@ -107,8 +116,14 @@ struct CameraMapView: View {
         storage.salvarCameras(cameras)
     }
 
+    /// Só enquadra na primeira carga: fixar uma câmera dispara
+    /// `camerasVersao` e o reenquadramento jogava o mapa para longe no meio do
+    /// fluxo de posicionar várias câmeras em sequência.
+    @State private var jaEnquadrou = false
+
     private func recarregar() {
         cameras = storage.carregarCameras()
+        guard !jaEnquadrou else { return }
         // Enquadra as câmeras já posicionadas.
         let coords = comCoordenada.compactMap { c in
             c.latitude.flatMap { la in c.longitude.map { lo in CLLocationCoordinate2D(latitude: la, longitude: lo) } }
@@ -120,5 +135,6 @@ struct CameraMapView: View {
         let span = MKCoordinateSpan(latitudeDelta: max(0.05, (lats.max()! - lats.min()!) * 1.4),
                                     longitudeDelta: max(0.05, (lons.max()! - lons.min()!) * 1.4))
         posicao = .region(MKCoordinateRegion(center: centro, span: span))
+        jaEnquadrou = true
     }
 }

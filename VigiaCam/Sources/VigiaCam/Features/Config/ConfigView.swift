@@ -8,7 +8,9 @@ struct ConfigView: View {
     @State private var cameras: [Camera] = []
     @State private var showingAddCamera = false
     @State private var selectedTab = 0
-    @State private var modeloPreciso = ModelProvider.tipoAtivo == .geralPreciso
+    @State private var modeloAtivo = ModelProvider.tipoAtivo
+    @State private var avisoConfig: String?
+    @State private var cameraParaRemover: Camera?
     @State private var modoNoturno = NightBoost.modo
 
     var body: some View {
@@ -51,6 +53,18 @@ struct ConfigView: View {
                 configRow(title: "Webhook (POST JSON por alarme)", value: alarmes.webhookURL.isEmpty ? "—" : "ativo") {
                     TextField("https://sua-central/webhook", text: $alarmes.webhookURL)
                         .textFieldStyle(.roundedBorder)
+                    HStack(spacing: 8) {
+                        Button("Testar envio") { alarmes.testarWebhook() }
+                            .buttonStyle(.bordered).controlSize(.small)
+                            .disabled(alarmes.webhookURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                        if let ultimo = alarmes.ultimoWebhook {
+                            Text(ultimo).font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(ultimo.contains("OK") ? VigiaTheme.ok : VigiaTheme.danger)
+                        } else {
+                            Text("Nenhum envio nesta sessão.").font(.system(size: 10))
+                                .foregroundColor(VigiaTheme.muted)
+                        }
+                    }
                 }
                 configRow(title: "Atualizações", value: "v\(UpdateService.shared.versaoAtual)") {
                     UpdateStatusRow()
@@ -64,18 +78,19 @@ struct ConfigView: View {
             VStack(spacing: 16) {
                 configRow(title: "FPS Máximo", value: "\(config.fpsMax)") { Stepper("", value: $config.fpsMax, in: 1...60).labelsHidden() }
                 configRow(title: "Confiança Mínima", value: String(format: "%.0f%%", config.confianca * 100)) { Slider(value: $config.confianca, in: 0.05...0.95, step: 0.05).tint(VigiaTheme.accent) }
-                configRow(title: "Resolução Inferência", value: "\(config.imgsz)px") { Stepper("", value: $config.imgsz, in: 96...1280, step: 32).labelsHidden() }
+                // "Resolução Inferência" saiu daqui: o detector usa a resolução
+                // fixa do .mlpackage (ModelProvider.inputSize), então o campo
+                // nunca teve efeito nenhum — quem muda a resolução é a escolha
+                // do modelo, logo abaixo.
                 configRow(title: "Retenção (dias)", value: "\(config.retencaoDias)") { Stepper("", value: $config.retencaoDias, in: 1...365).labelsHidden() }
-                configRow(title: "Modelo de detecção",
-                          value: modeloPreciso ? "Preciso (11s)" : "Rápido (v8n)") {
+                configRow(title: "Modelo de detecção (padrão)", value: modeloAtivo.rotulo) {
                     Picker("", selection: Binding(
-                        get: { modeloPreciso },
-                        set: { ModelProvider.tipoAtivo = $0 ? .geralPreciso : .geral; modeloPreciso = $0 }
+                        get: { modeloAtivo },
+                        set: { ModelProvider.tipoAtivo = $0; modeloAtivo = $0 }
                     )) {
-                        Text("Rápido — yolov8n").tag(false)
-                        Text("Preciso — yolo11s").tag(true)
+                        ForEach(TipoModelo.allCases, id: \.self) { Text($0.rotulo).tag($0) }
                     }.pickerStyle(.segmented).labelsHidden()
-                    Text("No eval COCO do repo (12 imagens, 52 classes): v8n 60% precisão / 47% recall; yolo11s 57% / 57% — melhor equilíbrio, custo ~2× por inferência. O yolo11s capta melhor objetos pequenos/distantes.")
+                    Text("Eval COCO do repo (12 imagens, 52 classes): v8n 63% precisão / 46% recall; yolo11s 60% / 54%; 960px 54% / 58% (melhor recall de objeto distante, ~2,2× o custo). É a resolução do modelo que define a resolução de inferência. Cada câmera pode sobrescrever este padrão na própria tela.")
                         .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
                 }
                 configRow(title: "Modo noturno (detecção)", value: modoNoturno.titulo) {
@@ -88,13 +103,28 @@ struct ConfigView: View {
                     Text("Realce de baixa luz aplicado ao frame antes do YOLO (sombras + exposição + gamma + redução de ruído). Em \"Auto\", só entra quando a cena está escura de fato (luminância média < 25%) — de dia não custa nada.")
                         .font(.system(size: 10)).foregroundColor(VigiaTheme.muted)
                 }
-                Button(action: { storage.salvarConfig(config.validated()) }) {
+                Button(action: salvar) {
                     Text("Salvar").font(.system(size: 13, weight: .bold)).foregroundColor(.black)
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
                         .background(VigiaTheme.accentGradient).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
+                if let avisoConfig {
+                    Text(avisoConfig).font(.system(size: 11))
+                        .foregroundColor(avisoConfig.hasPrefix("Falha") ? VigiaTheme.danger : VigiaTheme.ok)
+                }
             }.padding(16)
         }
+    }
+
+    /// Salvar não dava retorno nenhum (nem em falha de cifra) e as câmeras já
+    /// rodando continuavam com a config antiga, porque o ViewModel só a lia no
+    /// init. A notificação faz as sessões vivas reagirem na hora.
+    private func salvar() {
+        let validada = config.validated()
+        storage.salvarConfig(validada)
+        config = validada
+        NotificationCenter.default.post(name: .configAlterada, object: nil)
+        avisoConfig = "Configurações salvas e aplicadas às câmeras em execução."
     }
 
     private func configRow<Content: View>(title: String, value: String, @ViewBuilder content: () -> Content) -> some View {
@@ -130,18 +160,35 @@ struct ConfigView: View {
                         Text(camera.categoria).font(.system(size: 10, weight: .bold)).foregroundColor(VigiaTheme.accent2)
                             .padding(.horizontal, 8).padding(.vertical, 2)
                             .background(VigiaTheme.accent2Glow).clipShape(RoundedRectangle(cornerRadius: 4))
-                        Button(action: { cameras.removeAll { $0.id == camera.id }; storage.salvarCameras(cameras) }) {
+                        // Remoção era imediata e sem desfazer, num item que
+                        // pode ter meses de gravação e configuração associadas.
+                        Button(action: { cameraParaRemover = camera }) {
                             Image(systemName: "trash").font(.system(size: 12)).foregroundColor(VigiaTheme.danger)
                         }.buttonStyle(.plain)
                     }.listRowBackground(VigiaTheme.card).listRowSeparator(.hidden)
                 }}.listStyle(.plain).scrollContentBackground(.hidden)
             }
         }
+        .confirmationDialog("Remover câmera?",
+                            isPresented: Binding(get: { cameraParaRemover != nil },
+                                                 set: { if !$0 { cameraParaRemover = nil } }),
+                            presenting: cameraParaRemover) { cam in
+            Button("Remover \(cam.nome)", role: .destructive) {
+                cameras.removeAll { $0.id == cam.id }
+                storage.salvarCameras(cameras)
+                cameraParaRemover = nil
+            }
+            Button("Cancelar", role: .cancel) { cameraParaRemover = nil }
+        } message: { cam in
+            Text("As gravações e capturas já feitas continuam no disco, mas a câmera sai do videowall, do mapa e dos painéis.\n\n\(cam.url)")
+        }
     }
 
     private var addCameraSheet: some View {
         AddCameraSheet(
-            existentes: cameras.map(\.id),
+            // Eram os ids (UUID) e o sheet compara com a URL: o aviso de
+            // "essa URL já está cadastrada" era inalcançável.
+            existentes: cameras.map(\.url),
             onCancel: { showingAddCamera = false },
             onAdd: { nova in
                 cameras.append(nova)

@@ -23,6 +23,13 @@ final class BusinessMetricsService: ObservableObject {
         porCamera[camera] = metrica
     }
 
+    /// Remove uma câmera dos KPIs ao vivo (chamado quando a sessão termina):
+    /// sem isto o painel seguia exibindo os últimos números de câmeras que já
+    /// não estão rodando, inclusive de câmeras removidas do sistema.
+    func remover(camera: String) {
+        porCamera[camera] = nil
+    }
+
     func limpar() { porCamera.removeAll() }
 
     /// Soma de todas as câmeras — a mesma agregação de sempre, só isolada
@@ -70,6 +77,7 @@ final class BusinessMetricsService: ObservableObject {
             // Só faz sentido como pico instantâneo por câmera — não existe
             // "pico" agregado numa janela histórica sem série completa, então
             // cai pro ao vivo mesmo quando uma `Metrica` de período é passada.
+            // `kpisSemJanela` avisa a UI para não rotular isso como "vs 7 dias".
             return "\(porCamera.values.map { $0.unicos["person"] ?? 0 }.max() ?? 0)"
         case "Sem capacete": return "\(somaUnicos(["NO-Hardhat"], m))"
         case "Sem colete": return "\(somaUnicos(["NO-Safety Vest"], m))"
@@ -78,6 +86,11 @@ final class BusinessMetricsService: ObservableObject {
         }
     }
 
+    /// KPIs que sempre refletem o AO VIVO, mesmo com uma janela histórica
+    /// selecionada — a UI precisa saber para não exibir "vs N dias anteriores"
+    /// com variação eternamente 0%.
+    static let kpisSemJanela: Set<String> = ["Aglomeração máx.", "Pico"]
+
     /// Compara o mesmo KPI em duas janelas (ex.: 7 dias atuais vs 7 dias
     /// anteriores). `variacaoPct` é `nil` quando não dá pra calcular variação
     /// percentual com sentido (KPI não numérico, ou ambos os períodos zerados).
@@ -85,7 +98,9 @@ final class BusinessMetricsService: ObservableObject {
         let strAtual = valor(kpi: kpi, metrica: atual)
         let strAnterior = valor(kpi: kpi, metrica: anterior)
         guard let vAtual = Double(strAtual), let vAnterior = Double(strAnterior) else { return (strAtual, nil) }
-        if vAnterior == 0 { return (strAtual, vAtual == 0 ? nil : 100) }
+        // Sair de 0 para N não é "+100%": era indistinguível de dobrar. Sem
+        // base de comparação, a variação simplesmente não existe.
+        if vAnterior == 0 { return (strAtual, nil) }
         return (strAtual, (vAtual - vAnterior) / vAnterior * 100)
     }
 }

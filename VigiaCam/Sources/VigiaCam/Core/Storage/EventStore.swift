@@ -149,6 +149,22 @@ final class EventStore {
     }
 
     /// Busca com filtros combináveis. `texto` casa tipo/câmera/detalhe.
+    /// Quantos eventos desde um instante (usado no KPI "Eventos Hoje", que
+    /// precisa contar a partir da meia-noite e não numa janela móvel de 24h).
+    func contarDesde(_ inicio: Date) -> Int {
+        fila.sync { [self] in
+            guard db != nil else { return 0 }
+            var stmt: OpaquePointer?
+            var total = 0
+            if sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM eventos WHERE ts >= ?", -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_double(stmt, 1, inicio.timeIntervalSince1970)
+                if sqlite3_step(stmt) == SQLITE_ROW { total = Int(sqlite3_column_int(stmt, 0)) }
+            }
+            sqlite3_finalize(stmt)
+            return total
+        }
+    }
+
     /// Todas as câmeras que já geraram evento na janela — a aba Eventos
     /// montava o filtro a partir dos resultados JÁ filtrados, então escolher
     /// uma câmera eliminava as demais opções do seletor.

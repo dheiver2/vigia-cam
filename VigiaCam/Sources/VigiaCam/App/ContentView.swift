@@ -5,6 +5,7 @@ struct ContentView: View {
     @ObservedObject var eventService: EventService
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var updates = UpdateService.shared
+    @ObservedObject private var rec = RecordingService.shared
     @State private var selectedTab = "cameras"
     @State private var currentTime = ""
     @State private var cameras: [Camera] = []
@@ -52,6 +53,26 @@ struct ContentView: View {
         }
     }
 
+    /// Falha de gravação (disco cheio, writer inválido) precisa aparecer: o
+    /// serviço detecta, mas nenhuma tela mostrava e o usuário só descobriria
+    /// ao procurar o arquivo depois.
+    @ViewBuilder
+    private var bannerErroGravacao: some View {
+        if let erro = rec.ultimoErro {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Gravação", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text(erro).font(.system(size: 10)).fixedSize(horizontal: false, vertical: true)
+                Button("Dispensar") { rec.ultimoErro = nil }
+                    .buttonStyle(.plain).font(.system(size: 10)).foregroundColor(VigiaTheme.accent2)
+            }
+            .foregroundColor(VigiaTheme.danger)
+            .padding(10).background(VigiaTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 10).padding(.bottom, 6)
+        }
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
@@ -82,6 +103,7 @@ struct ContentView: View {
 
             Spacer()
 
+            bannerErroGravacao
             bannerUpdate
 
             Divider().background(VigiaTheme.border)
@@ -162,7 +184,7 @@ struct ContentView: View {
         switch selectedTab {
         case "cameras": LiveWallView(storage: storage)
         case "map": CameraMapView(storage: storage)
-        case "alarms": AlarmsView(categorias: categorias)
+        case "alarms": AlarmsView(categorias: categorias, nomesCameras: cameras.map(\.nome))
         case "lpr": LPRView(podeGerenciar: papel.podeOperar)
         case "business": BusinessDashboardView()
         case "dashboard": DashboardView(storage: storage, eventService: eventService)

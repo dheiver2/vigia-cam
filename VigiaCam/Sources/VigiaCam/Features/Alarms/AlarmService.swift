@@ -30,7 +30,10 @@ final class AlarmService: ObservableObject {
         snapshotProviders[camera] = nil
     }
     /// Classes monitoradas (vazio = todas). Ex.: só ["person","car"].
-    @Published var classesMonitoradas: Set<String> = []
+    /// Persistida junto das opções: sem isso, aplicar um pacote de nicho fixava
+    /// as classes e elas sumiam no boot seguinte — os alarmes voltavam a
+    /// disparar para classes que o usuário havia desativado.
+    @Published var classesMonitoradas: Set<String> = [] { didSet { persistirOpcoes() } }
 
     private let storage = StorageService.shared
     private weak var eventService: EventService?
@@ -147,6 +150,8 @@ final class AlarmService: ObservableObject {
 
     private struct Opcoes: Codable {
         var somAtivo: Bool, autoSnapshot: Bool, webhookURL: String, notificacaoSistema: Bool
+        /// Opcional para que arquivos gravados antes desta versão decodifiquem.
+        var classesMonitoradas: [String]?
     }
 
     private var carregandoOpcoes = false
@@ -154,7 +159,8 @@ final class AlarmService: ObservableObject {
     private func persistirOpcoes() {
         guard !carregandoOpcoes else { return }
         let o = Opcoes(somAtivo: somAtivo, autoSnapshot: autoSnapshot,
-                       webhookURL: webhookURL, notificacaoSistema: notificacaoSistema)
+                       webhookURL: webhookURL, notificacaoSistema: notificacaoSistema,
+                       classesMonitoradas: Array(classesMonitoradas))
         if let data = try? JSONEncoder().encode(o) {
             storage.salvarRaw(data, para: "opcoes_alarme.json")
         }
@@ -166,21 +172,51 @@ final class AlarmService: ObservableObject {
         carregandoOpcoes = true
         somAtivo = o.somAtivo; autoSnapshot = o.autoSnapshot
         webhookURL = o.webhookURL; notificacaoSistema = o.notificacaoSistema
+        classesMonitoradas = Set(o.classesMonitoradas ?? [])
         carregandoOpcoes = false
     }
 
     /// Notificação de integração: POST JSON para um endpoint externo (SIEM,
-    /// central de monitoramento, automação). Falha silenciosa, nunca bloqueia.
+    /// central de monitoramento, automação). Nunca bloqueia o alarme, mas o
+    /// resultado agora é registrado: antes o `dataTask` era disparado sem
+    /// completion nenhum e URL errada, 500 ou DNS quebrado sumiam — a
+    /// integração podia estar morta há semanas sem ninguém notar.
     private func enviarWebhook(_ ev: AlarmEvent) {
+        enviarWebhook(payload: ["evento": "alarme", "regra": ev.regra, "camera": ev.camera,
+                                "severidade": ev.severidade.rawValue, "mensagem": ev.mensagem,
+                                "quando": ISO8601DateFormatter().string(from: ev.quando)])
+    }
+
+    /// Resultado do último POST (mostrado na tela de Alarmes).
+    @Published private(set) var ultimoWebhook: String?
+
+    /// Dispara um POST de teste, para o usuário validar a integração na hora.
+    func testarWebhook() {
+        enviarWebhook(payload: ["evento": "teste", "mensagem": "Teste de webhook do VIGIA·CAM",
+                                "quando": ISO8601DateFormatter().string(from: Date())])
+    }
+
+    private func enviarWebhook(payload: [String: Any]) {
         let s = webhookURL.trimmingCharacters(in: .whitespaces)
         guard let url = URL(string: s), s.hasPrefix("http") else { return }
         var req = URLRequest(url: url); req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["evento": "alarme", "regra": ev.regra, "camera": ev.camera,
-                                   "severidade": ev.severidade.rawValue, "mensagem": ev.mensagem,
-                                   "quando": ISO8601DateFormatter().string(from: ev.quando)]
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        URLSession.shared.dataTask(with: req).resume()
+        req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        let hora = DateFormatter(); hora.dateFormat = "HH:mm:ss"
+        URLSession.shared.dataTask(with: req) { [weak self] _, resp, erro in
+            let carimbo = hora.string(from: Date())
+            let texto: String
+            if let erro {
+                texto = "\(carimbo) — falha: \(erro.localizedDescription)"
+            } else if let http = resp as? HTTPURLResponse {
+                texto = (200..<300).contains(http.statusCode)
+                    ? "\(carimbo) — OK (\(http.statusCode))"
+                    : "\(carimbo) — HTTP \(http.statusCode)"
+            } else {
+                texto = "\(carimbo) — resposta inesperada"
+            }
+            DispatchQueue.main.async { self?.ultimoWebhook = texto }
+        }.resume()
     }
 
     // MARK: - CRUD de regras (persistido em regras_alarme.json)

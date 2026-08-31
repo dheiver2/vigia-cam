@@ -12,6 +12,11 @@ struct LPRView: View {
     @State private var interesse: [(String, String)] = []
     @State private var novaPlaca = ""
     @State private var novaDescricao = ""
+    /// Placas de interesse em memória: `linhaPlaca` consultava o SQLite (com
+    /// `fila.sync`) uma vez por linha a cada redraw — até 500 queries síncronas
+    /// na main thread por frame de UI, travando a lista.
+    @State private var interesseSet: Set<String> = []
+    @State private var avisoPlaca: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +36,7 @@ struct LPRView: View {
             }
         }
         .background(VigiaTheme.bg)
-        .onAppear { interesse = EventStore.shared.listarInteresse() }
+        .onAppear { recarregarInteresse() }
     }
 
     private var aoVivo: some View {
@@ -78,14 +83,25 @@ struct LPRView: View {
                     Button("Adicionar") {
                         let p = novaPlaca.uppercased().replacingOccurrences(of: "-", with: "")
                             .trimmingCharacters(in: .whitespaces)
-                        guard p.count == 7 else { return }
+                        // Antes: `guard p.count == 7 else { return }` — placa
+                        // curta ou fora do padrão sumia sem nenhuma mensagem, e
+                        // "1234567" era aceito como se fosse placa.
+                        guard Self.placaValida(p) else {
+                            avisoPlaca = "Placa inválida. Use o formato ABC1D23 (Mercosul) ou ABC1234."
+                            return
+                        }
+                        avisoPlaca = nil
                         EventStore.shared.adicionarInteresse(p, descricao: novaDescricao)
                         novaPlaca = ""; novaDescricao = ""
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            interesse = EventStore.shared.listarInteresse()
+                            recarregarInteresse()
                         }
                     }.buttonStyle(.borderedProminent).tint(VigiaTheme.accent)
                 }.padding(.horizontal, 12)
+            }
+            if let avisoPlaca {
+                Text(avisoPlaca).font(.system(size: 11)).foregroundColor(VigiaTheme.danger)
+                    .padding(.horizontal, 12)
             }
             if interesse.isEmpty {
                 vazio("Lista de interesse vazia",
@@ -101,7 +117,7 @@ struct LPRView: View {
                             Button(action: {
                                 EventStore.shared.removerInteresse(placa)
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    interesse = EventStore.shared.listarInteresse()
+                                    recarregarInteresse()
                                 }
                             }) {
                                 Image(systemName: "trash").font(.system(size: 12)).foregroundColor(VigiaTheme.danger)
@@ -115,10 +131,20 @@ struct LPRView: View {
         }
     }
 
+    /// Mesmo formato aceito pelo motor de leitura (Mercosul ou antiga).
+    static func placaValida(_ p: String) -> Bool {
+        p.range(of: "^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$", options: .regularExpression) != nil
+    }
+
+    private func recarregarInteresse() {
+        interesse = EventStore.shared.listarInteresse()
+        interesseSet = Set(interesse.map(\.0))
+    }
+
     private func linhaPlaca(_ p: EventStore.Placa) -> some View {
         HStack {
             Text(p.placa).font(.system(size: 15, weight: .black, design: .monospaced))
-                .foregroundColor(EventStore.shared.interesse(p.placa) != nil ? VigiaTheme.danger : .white)
+                .foregroundColor(interesseSet.contains(p.placa) ? VigiaTheme.danger : .white)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(VigiaTheme.panel)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(VigiaTheme.border, lineWidth: 1))

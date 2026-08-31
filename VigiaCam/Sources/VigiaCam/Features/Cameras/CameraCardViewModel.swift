@@ -114,6 +114,12 @@ class CameraCardViewModel: ObservableObject {
             }
             .store(in: &bag)
 
+        // Configurações salvas -> aplica a esta sessão sem reiniciar a câmera.
+        NotificationCenter.default.publisher(for: .configAlterada)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.recarregarConfig() }
+            .store(in: &bag)
+
         // frame -> gravação (quando a câmera está gravando)
         cameraService.$currentFrame
             .compactMap { $0 }
@@ -122,6 +128,17 @@ class CameraCardViewModel: ObservableObject {
                 RecordingService.shared.alimentar(self.camera.nome, image: img)
             }
             .store(in: &bag)
+    }
+
+    /// Relê AppConfig e reaplica no motor desta câmera (FPS de extração,
+    /// confiança, classes monitoradas e taxa do laço de detecção).
+    private func recarregarConfig() {
+        appConfig = StorageService.shared.carregarConfig()
+        detector.confidenceThreshold = appConfig.confianca
+        detector.allowedClasses = appConfig.classesMonitoradas
+        detectorCascata?.confidenceThreshold = appConfig.confianca
+        cameraService.fpsExtracao = Double(appConfig.fpsMax)
+        if detectTimer != nil { startDetection() }   // reprograma o intervalo
     }
 
     /// Fixa (ou libera, com `nil`) o modelo de detecção desta câmera e
@@ -203,6 +220,9 @@ class CameraCardViewModel: ObservableObject {
         cameraService.stopCamera()
         AlarmService.shared.removerSnapshotProvider(camera: camera.nome)
         CameraHealthRegistry.shared.encerrarSessao(camera.id)
+        // Tira a câmera dos KPIs "ao vivo": eles seguiam mostrando os últimos
+        // números de câmeras que já haviam parado.
+        BusinessMetricsService.shared.remover(camera: camera.nome)
     }
 
     /// Extrapola as caixas rastreadas a ~15 Hz (independente da taxa de inferência),

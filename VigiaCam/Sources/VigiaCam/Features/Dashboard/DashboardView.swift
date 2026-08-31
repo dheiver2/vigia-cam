@@ -16,6 +16,12 @@ struct DashboardView: View {
                     KPICardView(title: "Câmeras", value: "\(totalCameras)", icon: "video", color: VigiaTheme.accent)
                     KPICardView(title: "Online", value: "\(saude.online.count)", icon: "wifi",
                                 color: saude.online.isEmpty ? VigiaTheme.danger : VigiaTheme.ok)
+                    // O dado de indisponíveis já existia no registro e nenhuma
+                    // tela mostrava; o grid de 2 colunas ainda deixava o
+                    // terceiro card sozinho na linha de baixo.
+                    KPICardView(title: "Indisponíveis", value: "\(max(0, totalCameras - saude.online.count))",
+                                icon: "wifi.slash",
+                                color: totalCameras > saude.online.count ? VigiaTheme.warning : VigiaTheme.muted)
                     KPICardView(title: "Eventos Hoje", value: "\(totalEventos)", icon: "bolt.fill", color: VigiaTheme.accent2)
                 }.padding(16)
                 VStack(alignment: .leading, spacing: 12) {
@@ -49,7 +55,9 @@ struct DashboardView: View {
                             ForEach(ocorrenciasPorTipo, id: \.0) { (tipo, qtd) in
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("\(qtd)").font(.system(size: 22, weight: .black, design: .monospaced))
-                                        .foregroundColor(tipo.contains("critico") ? VigiaTheme.danger : VigiaTheme.accent)
+                                        // "critico" é severidade, não tipo: a
+                                        // condição antiga nunca era verdadeira.
+                                        .foregroundColor(tipo.uppercased().hasPrefix("ALARME") ? VigiaTheme.danger : VigiaTheme.accent)
                                     Text(tipo).font(.system(size: 10, weight: .semibold))
                                         .foregroundColor(VigiaTheme.muted).lineLimit(1)
                                 }
@@ -86,6 +94,15 @@ struct DashboardView: View {
         .background(VigiaTheme.bg)
         .onAppear { carregarDados() }
         .onChange(of: storage.camerasVersao) { carregarDados() }
+        // Sem isto os painéis congelavam enquanto a aba ficava aberta, mesmo
+        // com o app gravando eventos o tempo todo.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                guard !Task.isCancelled else { break }
+                carregarDados()
+            }
+        }
     }
 
     private static let horaFmt: DateFormatter = {
@@ -94,7 +111,12 @@ struct DashboardView: View {
 
     private func carregarDados() {
         totalCameras = storage.carregarCameras().count
-        totalEventos = eventService.eventos.count
+        // Era `eventService.eventos.count` lido ANTES do carregamento
+        // assíncrono: na primeira abertura mostrava 0 e depois sempre o total
+        // da visita anterior, contradizendo a lista logo abaixo. Agora conta no
+        // SQLite, a mesma fonte da aba Eventos, e "hoje" é desde a meia-noite.
+        let inicioDoDia = Calendar.current.startOfDay(for: Date())
+        totalEventos = EventStore.shared.contarDesde(inicioDoDia)
         eventService.carregarEventos(dias: 1)
         ocorrenciasPorTipo = EventStore.shared.contagemPorTipo(dias: 7)
         historicoStatus = EventStore.shared.historicoStatus(dias: 7, limite: 50)

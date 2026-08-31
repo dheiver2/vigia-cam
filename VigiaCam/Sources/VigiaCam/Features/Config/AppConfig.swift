@@ -1,5 +1,13 @@
 import Foundation
 
+extension Notification.Name {
+    /// Postada quando o usuário salva as Configurações. As sessões de câmera
+    /// já em execução recarregam FPS/confiança/classes — antes o ViewModel lia
+    /// a config só no `init` e o "Salvar" não tinha efeito nenhum sobre quem
+    /// já estava rodando.
+    static let configAlterada = Notification.Name("vigia.configAlterada")
+}
+
 /// Configuração do app, com limites aplicados por `validated()`.
 ///
 /// Estava dentro de `Camera.swift` (junto do modelo de câmera e de um store de

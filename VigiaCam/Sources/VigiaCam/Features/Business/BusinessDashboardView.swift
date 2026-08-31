@@ -26,14 +26,28 @@ struct BusinessDashboardView: View {
 
     /// `nil` quando "Ao vivo" está selecionado — os KPIs seguem lendo direto
     /// de `metrics.porCamera`, como sempre fizeram.
-    private var comparacao: (atual: BusinessMetricsService.Metrica, anterior: BusinessMetricsService.Metrica)? {
-        guard let dias = janela.dias else { return nil }
-        let agora = Date()
-        let inicioAtual = agora.addingTimeInterval(-Double(dias) * 86400)
-        let inicioAnterior = inicioAtual.addingTimeInterval(-Double(dias) * 86400)
-        let atual = EventStore.shared.somarPeriodo(desde: inicioAtual, ate: agora)
-        let anterior = EventStore.shared.somarPeriodo(desde: inicioAnterior, ate: inicioAtual)
-        return (atual, anterior)
+    ///
+    /// Era uma computed property que rodava `somarPeriodo` DUAS vezes e era
+    /// avaliada dentro do ForEach dos KPIs: com 4 cards davam 8 varreduras
+    /// SQLite síncronas na main thread a cada redraw. Agora é calculada uma vez
+    /// por mudança de janela, fora da main.
+    @State private var comparacao: (atual: BusinessMetricsService.Metrica, anterior: BusinessMetricsService.Metrica)?
+    @State private var carregandoComparacao = false
+
+    private func recalcularComparacao() {
+        guard let dias = janela.dias else { comparacao = nil; return }
+        carregandoComparacao = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let agora = Date()
+            let inicioAtual = agora.addingTimeInterval(-Double(dias) * 86400)
+            let inicioAnterior = inicioAtual.addingTimeInterval(-Double(dias) * 86400)
+            let atual = EventStore.shared.somarPeriodo(desde: inicioAtual, ate: agora)
+            let anterior = EventStore.shared.somarPeriodo(desde: inicioAnterior, ate: inicioAtual)
+            DispatchQueue.main.async {
+                comparacao = (atual, anterior)
+                carregandoComparacao = false
+            }
+        }
     }
 
     var body: some View {
@@ -89,10 +103,13 @@ struct BusinessDashboardView: View {
                 // KPIs do nicho
                 LazyVGrid(columns: cols, spacing: 12) {
                     ForEach(nicho.kpis, id: \.self) { kpi in
-                        if let comparacao {
+                        if let comparacao, !BusinessMetricsService.kpisSemJanela.contains(kpi) {
                             let r = metrics.valorComparado(kpi: kpi, atual: comparacao.atual, anterior: comparacao.anterior)
                             KPICardView(title: kpi, value: r.atual, icon: iconeKPI(kpi), color: corKPI(kpi), variacaoPct: r.variacaoPct)
                         } else {
+                            // Sem janela (ou KPI que só existe ao vivo): mostra o
+                            // valor instantâneo SEM seta de variação, em vez de
+                            // exibir "vs N dias" com 0% eterno.
                             KPICardView(title: kpi, value: metrics.valor(kpi: kpi), icon: iconeKPI(kpi), color: corKPI(kpi))
                         }
                     }
@@ -144,6 +161,8 @@ struct BusinessDashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(VigiaTheme.bg)
+        .onAppear(perform: recalcularComparacao)
+        .onChange(of: janela) { recalcularComparacao() }
     }
 
     private func metricaChip(_ t: String, _ v: Int, _ c: Color) -> some View {
