@@ -51,14 +51,14 @@ enum Nicho: String, CaseIterable, Identifiable {
     }
 
     /// Categoria de câmera (aba Ao Vivo) a mostrar automaticamente ao aplicar
-    /// este nicho. `nil` = não muda o filtro (nichos gerais não têm um lote
-    /// de câmera dedicado). Só Canteiro de Obras tem hoje.
-    var categoriaCamera: String? {
-        switch self {
-        case .canteiroDeObras: return "Trânsito / Demo (DOT público)"
-        default: return nil
-        }
-    }
+    /// este nicho. `nil` = não mexe no filtro do usuário.
+    ///
+    /// Canteiro de Obras apontava para "Trânsito / Demo (DOT público)", que são
+    /// câmeras de rodovia de DOTs americanos: aplicar o pacote de EPI jogava o
+    /// operador justamente onde o modelo de capacete/colete não tem o que ver.
+    /// Nenhum nicho troca o filtro por conta própria agora — as câmeras do
+    /// canteiro são cadastradas pelo próprio usuário.
+    var categoriaCamera: String? { nil }
 
     /// Classes relevantes ao nicho, no vocabulário do MODELO daquele nicho
     /// (COCO para os nichos gerais, EPI para Canteiro de Obras). Vazio = todas.

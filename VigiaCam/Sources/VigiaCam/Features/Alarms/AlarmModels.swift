@@ -30,10 +30,16 @@ enum AlvoAlarme: Hashable {
     }
 
     /// Contagem observada por esta regra, dado o mapa classe -> quantidade.
-    func valor(em counts: [String: Int]) -> Int {
+    /// `monitorada` filtra as classes ativas (vazio/`nil` = todas) — é o mesmo
+    /// critério do `AlarmService`, que antes reimplementava esta conta e criava
+    /// duas fontes de verdade para "a regra disparou".
+    func valor(em counts: [String: Int], monitorada: (String) -> Bool = { _ in true }) -> Int? {
         switch self {
-        case .qualquerObjeto: return counts.values.reduce(0, +)
-        case .classe(let c): return counts[c] ?? 0
+        case .qualquerObjeto:
+            return counts.filter { monitorada($0.key) }.values.reduce(0, +)
+        case .classe(let c):
+            guard monitorada(c) else { return nil }   // classe desativada: regra não se aplica
+            return counts[c] ?? 0
         }
     }
 }
@@ -181,9 +187,11 @@ struct AlarmRule: Codable, Identifiable, Hashable {
         escopo.casa(nomeCamera: nome, categoria: categoria)
     }
 
-    /// A regra disparou para esta leitura?
-    func disparou(counts: [String: Int]) -> Bool {
-        ativo && alvo.valor(em: counts) >= limite
+    /// Valor observado se a regra se aplica e atingiu o limite; `nil` caso
+    /// contrário. Fonte de verdade única, usada por `AlarmService.avaliar`.
+    func disparo(counts: [String: Int], monitorada: (String) -> Bool = { _ in true }) -> Int? {
+        guard ativo, let v = alvo.valor(em: counts, monitorada: monitorada), v >= limite else { return nil }
+        return v
     }
 
     static let exemplos: [AlarmRule] = [

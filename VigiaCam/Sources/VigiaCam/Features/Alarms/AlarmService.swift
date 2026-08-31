@@ -67,16 +67,9 @@ final class AlarmService: ObservableObject {
         var disparados: [AlarmEvent] = []
         for regra in regras where regra.ativo && regra.casaCamera(nome: camera, categoria: categoria) {
             // Só as classes monitoradas entram na conta — na regra de classe
-            // única e também no total.
-            let valor: Int
-            switch regra.alvo {
-            case .classe(let c):
-                guard monitora(c) else { continue }
-                valor = counts[c] ?? 0
-            case .qualquerObjeto:
-                valor = counts.filter { monitora($0.key) }.values.reduce(0, +)
-            }
-            guard valor >= regra.limite else { continue }
+            // única e também no total. A conta vive em `AlarmRule.disparo`,
+            // para não haver duas implementações do mesmo critério.
+            guard let valor = regra.disparo(counts: counts, monitorada: monitora) else { continue }
             let chave = "\(regra.id)|\(camera)"
             if let ult = ultimoDisparo[chave], agora.timeIntervalSince(ult) < debounce { continue }
             ultimoDisparo[chave] = agora

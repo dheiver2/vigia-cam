@@ -8,6 +8,8 @@ struct UsersAdminView: View {
     @State private var novoPapel: Papel = .operador
     @State private var trocandoSenhaDe: Usuario?
     @State private var senhaNova = ""
+    @State private var erroUsuarios: String?
+    @State private var erroSenha: String?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -18,13 +20,26 @@ struct UsersAdminView: View {
                     ForEach(Papel.allCases) { Text($0.label).tag($0) }
                 }.pickerStyle(.menu).frame(width: 140)
                 Button("Criar") {
+                    // `criar` devolve false (nome duplicado, hash falhou) e a
+                    // tela não dizia nada: a única pista era o formulário não
+                    // limpar.
+                    guard novaSenha.count >= 8 else {
+                        erroUsuarios = "A senha precisa ter ao menos 8 caracteres."; return
+                    }
                     if auth.criar(nome: novoNome, senha: novaSenha, papel: novoPapel) {
-                        novoNome = ""; novaSenha = ""
+                        novoNome = ""; novaSenha = ""; erroUsuarios = nil
+                    } else {
+                        erroUsuarios = "Não foi possível criar \(novoNome) — o nome já existe?"
                     }
                 }.buttonStyle(.borderedProminent).tint(VigiaTheme.accent)
                     .disabled(novoNome.trimmingCharacters(in: .whitespaces).isEmpty || novaSenha.isEmpty)
                 Spacer()
             }.padding(.horizontal, 16)
+
+            if let erroUsuarios {
+                Text(erroUsuarios).font(.system(size: 11)).foregroundColor(VigiaTheme.danger)
+                    .padding(.horizontal, 16)
+            }
 
             List(auth.usuarios) { u in
                 HStack {
@@ -51,11 +66,20 @@ struct UsersAdminView: View {
         .sheet(item: $trocandoSenhaDe) { u in
             VStack(spacing: 12) {
                 Text("Nova senha para \(u.nome)").font(.headline)
+                if let erroSenha {
+                    Text(erroSenha).font(.system(size: 11)).foregroundColor(VigiaTheme.danger)
+                }
                 SecureField("Nova senha", text: $senhaNova).textFieldStyle(.roundedBorder).frame(width: 220)
                 HStack {
                     Button("Cancelar") { trocandoSenhaDe = nil }
                     Button("Salvar") {
-                        _ = auth.trocarSenha(u, nova: senhaNova)
+                        guard senhaNova.count >= 8 else {
+                            erroSenha = "Mínimo de 8 caracteres."; return
+                        }
+                        guard auth.trocarSenha(u, nova: senhaNova) else {
+                            erroSenha = "Não foi possível salvar a senha."; return
+                        }
+                        erroSenha = nil
                         trocandoSenhaDe = nil
                     }.buttonStyle(.borderedProminent).disabled(senhaNova.isEmpty)
                 }

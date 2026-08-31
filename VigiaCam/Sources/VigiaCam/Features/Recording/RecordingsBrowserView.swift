@@ -23,10 +23,16 @@ struct RecordingsBrowserView: View {
     @State private var gerandoTimelapse = false
     @State private var msgTimelapse = ""
     @State private var fatorTimelapse = 8
+    @State private var carregando = false
+    /// Filtro por dia: `Item.dia` já existia e nenhuma tela o usava, então a
+    /// lista despejava meses inteiros de uma vez.
+    @State private var diaFiltro = ""
 
     private var cameras: [String] { Array(Set(itens.map(\.camera))).sorted() }
+    private var dias: [String] { Array(Set(itens.map(\.dia))).sorted(by: >) }
     private var filtrados: [Item] {
-        cameraFiltro.isEmpty ? itens : itens.filter { $0.camera == cameraFiltro }
+        itens.filter { (cameraFiltro.isEmpty || $0.camera == cameraFiltro)
+                    && (diaFiltro.isEmpty || $0.dia == diaFiltro) }
     }
 
     var body: some View {
@@ -45,7 +51,12 @@ struct RecordingsBrowserView: View {
                     Text("Todas").tag("")
                     ForEach(cameras, id: \.self) { Text($0).tag($0) }
                 }.pickerStyle(.menu)
+                Picker("Dia", selection: $diaFiltro) {
+                    Text("Todos").tag("")
+                    ForEach(dias, id: \.self) { Text($0).tag($0) }
+                }.pickerStyle(.menu).frame(maxWidth: 130)
                 Spacer()
+                if carregando { ProgressView().controlSize(.small) }
                 Button(action: recarregar) { Image(systemName: "arrow.clockwise") }.buttonStyle(.bordered)
             }.padding(10)
             List(filtrados, selection: Binding(get: { selecionado?.id }, set: { id in
@@ -161,6 +172,11 @@ struct RecordingsBrowserView: View {
                     gerandoTimelapse = false
                     if p.terminationStatus == 0 {
                         msgTimelapse = "Time lapse gerado: \(saida.lastPathComponent)"
+                        // Derivado exportável precisa de hash como qualquer
+                        // outra evidência: sem registro na cadeia de custódia,
+                        // o arquivo não sustenta o argumento probatório.
+                        _ = StorageService.shared.registrarCadeia(
+                            arquivo: saida.path, tipo: "timelapse", camera: item.camera)
                         StorageService.shared.auditar("timelapse",
                             detalhe: "origem=\(item.url.lastPathComponent) fator=\(fator)", usuario: usuario)
                         recarregar()
@@ -174,7 +190,21 @@ struct RecordingsBrowserView: View {
         }
     }
 
+    /// Enumerava a árvore inteira (gravações + capturas) de forma síncrona na
+    /// main thread e sem filtro de período: com meses de retenção, abrir a aba
+    /// travava a interface.
     private func recarregar() {
+        carregando = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let achados = Self.varrer()
+            DispatchQueue.main.async {
+                itens = achados
+                carregando = false
+            }
+        }
+    }
+
+    private static func varrer() -> [Item] {
         let fm = FileManager.default
         var out: [Item] = []
         // gravacoes/<camera>/<dia>/<hora>.mp4
@@ -197,7 +227,13 @@ struct RecordingsBrowserView: View {
                 let comps = url.pathComponents
                 let n = comps.count
                 let nome = url.deletingPathExtension().lastPathComponent
-                let camera = nome.split(separator: "-").dropLast().joined(separator: "-")
+                // O arquivo é "<slug>-HHMMSS.png". Era feito com
+                // split("-").dropLast().joined("-"), que descarta componentes
+                // VAZIOS: um nome como "SP, Dutra km 78" vira o slug
+                // "SP--Dutra-km-78" e voltava como "SP-Dutra-km-78" — diferente
+                // do diretório usado pelos vídeos, então fotos e vídeos da
+                // mesma câmera apareciam como câmeras distintas no filtro.
+                let camera = String(nome.dropLast(7))   // remove "-HHMMSS"
                 out.append(Item(id: url.path, url: url,
                                 camera: camera.isEmpty ? "?" : camera,
                                 dia: n >= 2 ? comps[n - 2] : "?",
@@ -205,7 +241,7 @@ struct RecordingsBrowserView: View {
                                 tamanho: (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0))
             }
         }
-        itens = out.sorted { $0.url.path > $1.url.path }
+        return out.sorted { $0.url.path > $1.url.path }
     }
 
     private func mb(_ bytes: Int) -> String {

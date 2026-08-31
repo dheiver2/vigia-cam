@@ -141,6 +141,19 @@ struct CameraDetailView: View {
                          editandoPrivacidade ? VigiaTheme.ok : VigiaTheme.text) {
                         editandoPrivacidade.toggle()
                     }
+                    // AnalyticsConfigService já tinha removerLinha/limparZonas
+                    // e nenhum chamador: uma linha mal desenhada só podia ser
+                    // redesenhada, e as zonas acumulavam sem forma de apagar.
+                    if analitico.config(camera.url).linhaAtiva {
+                        acao("xmark.circle", "Apagar linha", VigiaTheme.danger) {
+                            analitico.removerLinha(camera.url)
+                        }
+                    }
+                    if !analitico.config(camera.url).zonas.isEmpty {
+                        acao("trash.slash", "Apagar zonas", VigiaTheme.danger) {
+                            analitico.limparZonas(camera.url)
+                        }
+                    }
                     if !privacy.zonasDe(camera.url).isEmpty {
                         acao("arrow.uturn.backward", "Desfazer", VigiaTheme.muted) { privacy.removerUltima(camera.url) }
                         acao("trash", "Limpar zonas", VigiaTheme.danger) { privacy.limpar(camera.url) }
@@ -399,7 +412,10 @@ struct CameraDetailView: View {
                 botaoPTZOnvif("arrow.up") { onvifMover(pan: 0, tilt: 0.6) }
                 HStack(spacing: 4) {
                     botaoPTZOnvif("arrow.left") { onvifMover(pan: -0.6, tilt: 0) }
-                    botaoPTZOnvif("stop.fill") { onvifParar() }
+                    // Stop fora do bloqueio: com `disabled(ptzOnvifOcupado)`
+                    // era impossível abortar um movimento em andamento, que é
+                    // exatamente quando o operador precisa dele.
+                    botaoPTZOnvif("stop.fill", sempreAtivo: true) { onvifParar() }
                     botaoPTZOnvif("arrow.right") { onvifMover(pan: 0.6, tilt: 0) }
                 }
                 botaoPTZOnvif("arrow.down") { onvifMover(pan: 0, tilt: -0.6) }
@@ -412,15 +428,16 @@ struct CameraDetailView: View {
         }
     }
 
-    private func botaoPTZOnvif(_ icone: String, _ ação: @escaping () -> Void) -> some View {
+    private func botaoPTZOnvif(_ icone: String, sempreAtivo: Bool = false,
+                               _ ação: @escaping () -> Void) -> some View {
         Button(action: ação) {
             Image(systemName: icone).font(.system(size: 11, weight: .bold))
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain).foregroundColor(.white)
         .background(Color.white.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 6))
-        .disabled(ptzOnvifOcupado)
-        .opacity(ptzOnvifOcupado ? 0.5 : 1)
+        .disabled(ptzOnvifOcupado && !sempreAtivo)
+        .opacity(ptzOnvifOcupado && !sempreAtivo ? 0.5 : 1)
     }
 
     private func onvifMover(pan: Double, tilt: Double, zoom: Double = 0) {

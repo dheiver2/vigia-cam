@@ -19,6 +19,11 @@ struct ContentView: View {
         Group {
             if auth.logado == nil {
                 LoginView()
+            } else if auth.logado?.nome == "admin" && auth.precisaTrocarSenhaPadrao {
+                // A flag existia e ninguém a usava: a tela de login só AVISAVA
+                // (exibindo a credencial padrão para quem passasse pelo
+                // monitor) e dava para operar indefinidamente com admin/admin.
+                TrocaSenhaObrigatoriaView()
             } else {
                 NavigationSplitView {
                     sidebar
@@ -38,6 +43,10 @@ struct ContentView: View {
             // Saúde das câmeras deixa de depender de a aba "Ao Vivo" estar
             // aberta (o Dashboard mostrava "Online: 0" por construção).
             CameraHealthMonitor.shared.configurar(cameras: cameras)
+            // Verificação de atualização na abertura: o banner da sidebar só
+            // aparecia se o usuário fosse até Configurações › Alarmes e
+            // clicasse "Verificar agora".
+            UpdateService.shared.verificar(silencioso: true)
             // Retenção: `limparRetencao` existia, era testada e NUNCA era
             // chamada — o disco crescia para sempre e o prazo prometido na
             // tela de Configurações não valia nada (inclusive para LGPD).
